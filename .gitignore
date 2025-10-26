@@ -1,0 +1,94 @@
+# Archivos de datos
+*.txt
+*.csv
+*.xlsx
+*.xls
+*.parquet
+*.jsonl
+*.json
+
+# Excepciones (archivos de configuración que SÍ queremos versionar)
+!params.yaml
+!dvc.yaml
+!dvc.lock
+!requirements.txt
+!.gitkeep
+
+# Directorios de datos y modelos (pesados)
+/data/raw/*
+/data/processed/*
+/data/outputs/*
+/data/evaluation/*
+/models/*
+
+# Mantener estructura de directorios
+!/data/raw/.gitkeep
+!/data/processed/.gitkeep
+!/data/outputs/.gitkeep
+!/data/evaluation/.gitkeep
+!/models/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# DVC - no ignorar dvc.lock (ya está permitido en línea 13)
+
+# Credenciales y configuración sensible
+.env
+aws_credentials.txt
+*.pem
+*.key
+credentials.txt
+secrets.*
+
+# Logs y temporales
+*.log
+logs/
+*.tmp
+*.bak
+
+# Modelos y checkpoints (muy pesados)
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.ckpt
+
+# Cache de transformers
+.cache/
+wandb/
+

@@ -1,0 +1,73 @@
+schema: '2.0'
+stages:
+  preprocess:
+    cmd: python src/data/make_dataset.py
+    deps:
+    - path: data/raw
+      hash: md5
+      md5: a98033fb29eadaabe039bf1ee4f77121.dir
+      size: 519712871
+      nfiles: 65945
+    - path: src/data/make_dataset.py
+      hash: md5
+      md5: 87bede2dbf7ef64cef1c26484560a258
+      size: 28751
+    params:
+      params.yaml:
+        data:
+          min_chars: 100
+          max_chars: 20000
+          keep_lang:
+          - en
+          dedup: true
+          dedup_method: hash
+          lowercase: false
+          remove_html: true
+          normalize_spaces: true
+          min_words: 15
+          min_paragraph_words: 20
+          min_english_confidence: 0.9
+          split_by_paragraphs: true
+          min_paragraph_length: 100
+    outs:
+    - path: data/processed/dataset_clean.csv
+      hash: md5
+      md5: 7d2624f5575703fce0c481ebfb239482
+      size: 222817696
+    - path: data/processed/dataset_clean.jsonl
+      hash: md5
+      md5: 96c2ee580fa9e2d9da87d8a44d77601b
+      size: 242629811
+    - path: data/processed/dataset_clean_stats.json
+      hash: md5
+      md5: 2276e94e70d5a10cd3b050109dfc9403
+      size: 357
+  split:
+    cmd: python src/data/split_dataset.py
+    deps:
+    - path: data/processed/dataset_clean.csv
+      hash: md5
+      md5: 7d2624f5575703fce0c481ebfb239482
+      size: 222817696
+    - path: src/data/split_dataset.py
+      hash: md5
+      md5: 3fcfe5ff625dfaa9986bbbc067d4bc03
+      size: 2903
+    params:
+      params.yaml:
+        split:
+          method: internal
+          test_size: 0.2
+          stratify:
+          - label
+          random_seed: 42
+          respect_existing_splits: true
+    outs:
+    - path: data/processed/test.csv
+      hash: md5
+      md5: 3d0c9333d1a444d9dd09a637e67829f7
+      size: 39947028
+    - path: data/processed/train.csv
+      hash: md5
+      md5: e6686654028c2c6338bab15c6e0aa734
+      size: 173013404

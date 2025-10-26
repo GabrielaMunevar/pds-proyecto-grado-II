@@ -1,0 +1,233 @@
+# Parámetros del proyecto PLS Biomédico
+# Este archivo centraliza todos los hiperparámetros del pipeline
+
+# ===============================================
+# DATOS - Preprocesamiento
+# ===============================================
+data:
+  min_chars: 100                   # Longitud mínima de texto en caracteres
+  max_chars: 20000                 # Longitud máxima de texto en caracteres
+  keep_lang: ["en"]                # Idiomas a conservar
+  dedup: true                      # Activar deduplicación
+  dedup_method: "hash"             # Método: hash, fuzzy, embedding
+  
+  # Normalización
+  lowercase: false                 # No lowercase para preservar nombres propios
+  remove_html: true                # Limpiar HTML
+  normalize_spaces: true           # Normalizar espacios en blanco
+  
+  # Filtros de calidad
+  min_words: 15                    # Mínimo de palabras por texto
+  min_paragraph_words: 20         # Mínimo de palabras por párrafo
+  min_english_confidence: 0.9     # Confianza mínima en detección de inglés
+  
+  # Procesamiento por párrafos
+  split_by_paragraphs: true       # Dividir por párrafos en lugar de líneas
+  min_paragraph_length: 100       # Longitud mínima de párrafo
+  
+# ===============================================
+# SPLIT - División de datos
+# ===============================================
+split:
+  method: "internal"               # 'internal' o 'original' (respeta splits de datasets)
+  test_size: 0.2                   # Proporción para test (80/20)
+  stratify: ["label"]              # Estratificar por etiqueta si existe
+  random_seed: 42                  # Semilla para reproducibilidad
+  respect_existing_splits: true    # Respetar splits existentes en el dataset
+
+# ===============================================
+# CLASIFICADOR - PLS/non-PLS
+# ===============================================
+classifier:
+  # Modelo
+  model: "distilbert-base-uncased" # o "dmis-lab/biobert-base-cased-v1.1"
+  max_length: 512                  # Longitud máxima de secuencia
+  
+  # Entrenamiento
+  lr: 2e-5                         # Learning rate
+  epochs: 4
+  batch_size: 32
+  warmup_steps: 500
+  weight_decay: 0.01
+  
+  # Manejo de desbalance
+  loss: "focal"                    # 'focal' o 'cross_entropy'
+  focal_gamma: 2.0                 # Gamma para focal loss
+  class_weight: "balanced"         # 'balanced' o null
+  
+  # Evaluación
+  tune_threshold: true             # Optimizar umbral para F1
+  metric: "f1_macro"               # Métrica objetivo
+  target_f1: 0.85                  # F1 objetivo
+  
+  # Augmentation (opcional)
+  augment_minority: false
+  augment_factor: 1.5
+
+# ===============================================
+# GENERADOR - PLS
+# ===============================================
+generator:
+  # Modelo base
+  base_model: "facebook/bart-base" # Opciones: bart-base, t5-base, led-base-16384
+  # bio_model: "GanjinZero/biobart-v2-base"  # Alternativa biomédica
+  
+  # Tokenización
+  max_src_tokens: 1024             # Tokens de entrada
+  max_tgt_tokens: 256              # Tokens de salida (resumen)
+  truncation: true
+  padding: "max_length"
+  
+  # Decoding
+  decoding:
+    strategy: "beam_search"        # beam_search, greedy, sampling
+    beam_size: 4
+    length_penalty: 1.1            # >1 favorece resúmenes más largos
+    no_repeat_ngram_size: 3        # Previene repetición
+    min_length: 50                 # Longitud mínima en tokens
+    max_length: 256                # Longitud máxima en tokens
+    early_stopping: true
+  
+  # Supervised Fine-Tuning (SFT)
+  sft:
+    lr: 3e-5
+    epochs: 4
+    batch_size: 8                  # Ajustar según GPU
+    gradient_accumulation_steps: 4 # Batch efectivo = 32
+    warmup_ratio: 0.1
+    weight_decay: 0.01
+    fp16: true                     # Mixed precision
+    save_steps: 1000
+    eval_steps: 500
+    logging_steps: 100
+    save_total_limit: 3            # Mantener solo 3 checkpoints
+  
+  # PEFT/LoRA (entrenamiento eficiente)
+  peft:
+    use_lora: false                # Activar para recursos limitados
+    r: 16                          # Rank de LoRA
+    lora_alpha: 32                 # Alpha de LoRA
+    lora_dropout: 0.05
+    target_modules: ["q_proj", "v_proj"]  # Módulos a adaptar
+    bias: "none"
+  
+  # Prompt engineering
+  prompt_template: "Summarize the following clinical trial in plain language, explaining the population, intervention, comparator, and outcomes using everyday words. Avoid jargon and do not copy exact phrases:\n\n{text}\n\nPlain Language Summary:"
+
+# ===============================================
+# SEMI-SUPERVISADO - Bucle iterativo
+# ===============================================
+semi_supervised:
+  enabled: true                    # Activar bucle semi-supervisado
+  
+  # Teacher model
+  teacher: "models/generator_sft"  # Path al checkpoint supervisado
+  
+  # Selección de datos unlabeled
+  selection:
+    strategy: "confidence"         # confidence, random, uncertainty
+    batch_size: 1000               # Datos a procesar por ronda
+    prioritize_short: true         # Priorizar textos cortos primero
+    max_length_first_round: 5000   # Chars para primera ronda
+  
+  # Mix de datos
+  mix_ratio_real_synth: [0.7, 0.3] # 70% reales, 30% sintéticos
+  
+  # Filtros de aceptación
+  filters:
+    # Legibilidad
+    flesch_min: 60                 # Flesch Reading Ease mínimo
+    flesch_delta_min: 15           # Incremento mínimo vs original
+    
+    # Calidad formal
+    long_sent_pct_max: 0.2         # % máx de oraciones >35 palabras
+    uppercase_ratio_max: 0.15      # Ratio máximo de mayúsculas
+    
+    # Factualidad
+    bertscore_min: 0.85            # BERTScore F1 mínimo
+    forbid_new_numbers: true       # No permitir números nuevos
+    min_compression_ratio: 0.3     # Ratio mínimo de compresión
+    max_compression_ratio: 0.8     # Ratio máximo de compresión
+  
+  # Re-entrenamiento
+  lora_training:
+    use_lora: true                 # Siempre usar LoRA en semi-supervisado
+    r: 16
+    lora_alpha: 32
+    epochs: 2                      # Menos epochs por ronda
+    lr: 2e-5                       # LR más bajo
+    early_stopping_patience: 3
+  
+  # Control
+  rounds: 2                        # Número de rondas semi-supervisadas
+  early_stop_metric: "bertscore_f1_dev"
+  early_stop_threshold: 0.87       # Detener si alcanza este valor
+  min_acceptance_rate: 0.3         # Tasa mínima de aceptación
+
+# ===============================================
+# EVALUACIÓN
+# ===============================================
+evaluation:
+  # Métricas con ground truth
+  metrics:
+    - "rouge"                      # ROUGE-1, ROUGE-2, ROUGE-L
+    - "bertscore"                  # BERTScore (P, R, F1)
+    - "flesch"                     # Flesch Reading Ease
+    - "compression_ratio"          # Ratio longitud
+    - "novel_ngrams"               # N-gramas no copiados
+  
+  # Métricas sin ground truth (sintéticos)
+  unsupervised_metrics:
+    - "flesch"
+    - "compression_ratio"
+    - "sentence_length_avg"
+    - "word_length_avg"
+  
+  # Configuración BERTScore
+  bertscore:
+    model: "microsoft/deberta-xlarge-mnli"  # Modelo para embeddings
+    lang: "en"
+    rescale_with_baseline: true
+  
+  # Targets objetivo
+  targets:
+    f1_classifier: 0.85            # F1 macro del clasificador
+    rouge_l: 0.38                  # ROUGE-L mínimo
+    bertscore_f1: 0.85             # BERTScore F1 mínimo
+    flesch_delta: 15               # Incremento Flesch mínimo
+  
+  # Reportes
+  report_format: "json"            # json, html, markdown
+  save_examples: true              # Guardar ejemplos cualitativos
+  num_examples: 50                 # Número de ejemplos a guardar
+
+# ===============================================
+# INFRAESTRUCTURA
+# ===============================================
+infrastructure:
+  # GPU
+  device: "cuda"                   # cuda, cpu, mps (Mac M1/M2)
+  num_gpus: 1
+  mixed_precision: true
+  
+  # Paralelización
+  num_workers: 4                   # Workers para DataLoader
+  prefetch_factor: 2
+  
+  # Logging
+  wandb:
+    enabled: false                 # Activar Weights & Biases
+    project: "pls-biomedico"
+    entity: null
+  
+  # Cache
+  cache_dir: ".cache"
+  hf_cache_dir: ".cache/huggingface"
+
+# ===============================================
+# REPRODUCIBILIDAD
+# ===============================================
+reproducibility:
+  random_seed: 42
+  deterministic: true              # Reproducibilidad exacta (puede ser más lento)
+

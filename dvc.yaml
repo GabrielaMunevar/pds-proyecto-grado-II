@@ -1,0 +1,71 @@
+# Pipeline DVC para el proyecto PLS
+
+stages:
+  preprocess:
+    cmd: python src/data/make_dataset.py
+    deps:
+      - src/data/make_dataset.py
+      - data/raw
+    params:
+      - data
+    outs:
+      - data/processed/dataset_clean.csv
+      - data/processed/dataset_clean.jsonl
+      - data/processed/dataset_clean_stats.json
+
+  split:
+    cmd: python src/data/split_dataset.py
+    deps:
+      - src/data/split_dataset.py
+      - data/processed/dataset_clean.csv
+    params:
+      - split
+    outs:
+      - data/processed/train.csv
+      - data/processed/test.csv
+
+  train_classifier:
+    cmd: python src/models/train_classifier.py
+    deps:
+      - src/models/train_classifier.py
+      - data/processed/train.parquet
+      - data/processed/dev.parquet
+    params:
+      - classifier
+    outs:
+      - models/pls_classifier
+      - data/processed/classified.parquet
+
+  train_generator:
+    cmd: python src/models/generate_pls.py --mode train
+    deps:
+      - src/models/generate_pls.py
+      - data/processed/train.parquet
+      - data/processed/dev.parquet
+    params:
+      - generator
+    outs:
+      - models/generator_sft
+      - data/outputs/supervised
+
+  semi_supervised_loop:
+    cmd: python src/loops/semi_supervised_loop.py
+    deps:
+      - src/loops/semi_supervised_loop.py
+      - models/generator_sft
+      - data/processed/train.parquet
+    params:
+      - semi_supervised
+    outs:
+      - models/generator_lora
+      - data/outputs/synthetic
+
+  evaluate:
+    cmd: python src/models/evaluate.py
+    deps:
+      - src/models/evaluate.py
+      - models/generator_sft
+      - data/processed/test.parquet
+    outs:
+      - data/evaluation/report.json
+
