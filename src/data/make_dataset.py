@@ -25,6 +25,13 @@ except ImportError:
     TEXTSTAT_AVAILABLE = False
     print("[WARN] textstat no disponible. Instalar con: pip install textstat")
 
+try:
+    import PyPDF2
+    PDF_AVAILABLE = True
+except ImportError:
+    PDF_AVAILABLE = False
+    print("[WARN] PyPDF2 no disponible. Instalar con: pip install PyPDF2")
+
 RAW = Path("data/raw")
 PROC = Path("data/processed")
 PROC.mkdir(parents=True, exist_ok=True)
@@ -32,8 +39,8 @@ PROC.mkdir(parents=True, exist_ok=True)
 # ==================== CONFIGURACIÓN ====================
 
 # Formatos admitidos
-ALLOWED_SUFFIXES = {".txt", ".csv", ".json", ".jsonl"}
-SKIP_SUFFIXES = {".pdf"}
+ALLOWED_SUFFIXES = {".txt", ".csv", ".json", ".jsonl", ".pdf"}
+SKIP_SUFFIXES = set()
 
 # FILTROS DE CALIDAD MEJORADOS (para textos médicos)
 MIN_LEN_TEXT = 100  # ~15-20 palabras mínimo
@@ -629,6 +636,64 @@ def iter_json(fp: Path) -> Iterator[Dict[str, any]]:
             }
 
 
+def iter_pdf(fp: Path) -> Iterator[Dict[str, any]]:
+    """Lee PDF con extracción de texto."""
+    if not PDF_AVAILABLE:
+        print(f"[WARN] PyPDF2 no disponible, saltando {fp}", file=sys.stderr)
+        return
+    
+    source_dataset, source_bucket, split, label = infer_meta_from_path(fp)
+    
+    try:
+        with fp.open("rb") as file:
+            pdf_reader = PyPDF2.PdfReader(file)
+            text_content = ""
+            
+            for page_num in range(len(pdf_reader.pages)):
+                page = pdf_reader.pages[page_num]
+                text_content += page.extract_text() + "\n"
+            
+            if not text_content.strip():
+                return
+            
+            # Normalizar el texto extraído
+            text_content = norm(text_content)
+            
+            # Dividir en párrafos
+            paragraphs = split_into_paragraphs(text_content)
+            
+            for i, paragraph in enumerate(paragraphs):
+                text_valid, issues = quality_check(paragraph)
+                
+                if not text_valid:
+                    continue
+                
+                readability = calculate_readability(paragraph)
+                medical = calculate_medical_density(paragraph)
+                
+                yield {
+                    "texto_original": paragraph,
+                    "resumen": "",
+                    "source": fp.parent.name,
+                    "doc_id": f"{fp.stem}#pdf_p{i+1}",
+                    "split": split,
+                    "label": label,
+                    "source_dataset": source_dataset,
+                    "source_bucket": source_bucket,
+                    "has_pair": False,
+                    "word_count_src": len(paragraph.split()),
+                    "word_count_pls": 0,
+                    "flesch_score": readability['flesch_reading_ease'],
+                    "avg_word_length": readability['avg_word_length'],
+                    "medical_density": medical['medical_terms_ratio'],
+                    "quality_issues": "|".join(issues) if issues else "",
+                    "processing_date": datetime.now().isoformat(),
+                }
+                
+    except Exception as e:
+        print(f"[WARN] Error procesando PDF {fp}: {e}", file=sys.stderr)
+
+
 # ==================== ITERADOR MAESTRO ====================
 
 def parse_files() -> Iterator[Dict[str, any]]:
@@ -648,6 +713,8 @@ def parse_files() -> Iterator[Dict[str, any]]:
                 yield from iter_jsonl(fp)
             elif suf == ".json":
                 yield from iter_json(fp)
+            elif suf == ".pdf":
+                yield from iter_pdf(fp)
         except Exception as e:
             print(f"[WARN] Skipping {fp}: {e}", file=sys.stderr)
 
@@ -770,6 +837,7 @@ def main():
     print("GENERACIÓN DE DATASET v2 - CALIDAD MEJORADA")
     print("="*80)
     print("\nMEJORAS IMPLEMENTADAS:")
+    print("  Procesamiento de PDFs y archivos de texto")
     print("  Fragmentación por párrafos (no líneas)")
     print("  Filtros de calidad estrictos (100-5000 chars)")
     print("  Validación de idioma inglés")
@@ -784,6 +852,8 @@ def main():
         print("WARNING: langdetect no disponible - no se validará idioma")
     if not TEXTSTAT_AVAILABLE:
         print("WARNING: textstat no disponible - no se calcularán métricas de legibilidad")
+    if not PDF_AVAILABLE:
+        print("WARNING: PyPDF2 no disponible - no se procesarán archivos PDF")
     
     print("\nIniciando procesamiento...\n")
     
