@@ -3,6 +3,7 @@
 *.csv
 *.xlsx
 *.xls
+*.txt
 *.parquet
 *.jsonl
 *.json
@@ -13,6 +14,8 @@
 !dvc.lock
 !requirements.txt
 !.gitkeep
+!README.md
+
 
 # Directorios de datos y modelos (pesados)
 /data/raw/*
@@ -91,4 +94,6 @@ logs/
 # Cache de transformers
 .cache/
 wandb/
+
+
 
