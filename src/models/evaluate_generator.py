@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Evaluar Generador T5
-Calcula métricas ROUGE y BERTScore para el modelo T5 entrenado.
+Calcula métricas completas: ROUGE, BLEU, SARI, BERTScore (best score) y legibilidad.
 
 Uso:
     python src/models/evaluate_generator.py
@@ -15,21 +15,15 @@ from pathlib import Path
 import warnings
 from tqdm import tqdm
 
+# Importar utilidades y configuración
+import sys
+sys.path.append(str(Path(__file__).parent.parent))
+from utils.text_chunking import split_into_chunks
+from utils.evaluation_metrics import calculate_all_metrics
+from utils.length_analysis import analyze_lengths_for_training
+from config import apply_prompt, get_prompt
+
 warnings.filterwarnings('ignore')
-
-try:
-    from rouge_score import rouge_scorer
-    ROUGE_AVAILABLE = True
-except:
-    ROUGE_AVAILABLE = False
-    print("rouge_score no disponible. Instalar: pip install rouge-score")
-
-try:
-    from bert_score import score
-    BERTSCORE_AVAILABLE = True
-except:
-    BERTSCORE_AVAILABLE = False
-    print("bert_score no disponible. Instalar: pip install bert-score")
 
 def loadModel():
     """Carga el modelo T5 entrenado."""
@@ -54,76 +48,103 @@ def loadSyntheticPairs():
     
     return testPairs
 
-def generatePLS(model, tokenizer, technicalText):
-    """Genera PLS a partir de texto técnico."""
-    # Agregar prefijo "simplify: "
-    inputText = f"simplify: {technicalText}"
+def generatePLS(model, tokenizer, technicalText, use_chunking=True, max_tokens=400):
+    """
+    Genera PLS a partir de texto técnico.
     
-    # Tokenizar
-    inputs = tokenizer(inputText, return_tensors='pt', max_length=256, truncation=True)
+    Si el texto es largo, lo divide en chunks, genera PLS para cada chunk,
+    y luego combina los resultados.
     
-    # Generar
-    with torch.no_grad():
-        outputs = model.generate(
-            inputs['input_ids'],
-            attention_mask=inputs['attention_mask'],
-            max_length=128,
-            num_beams=4,
-            early_stopping=True
-        )
+    Args:
+        model: Modelo T5 entrenado
+        tokenizer: Tokenizer T5
+        technicalText: Texto técnico a simplificar
+        use_chunking: Si True, usa chunking para textos largos
+        max_tokens: Máximo de tokens por chunk (default: 400)
     
-    # Decodificar
-    generated = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    return generated
+    Returns:
+        Texto PLS generado
+    """
+    # Contar tokens del texto técnico
+    tech_tokens = len(tokenizer.encode(technicalText, add_special_tokens=False))
+    
+    # Si el texto es corto o chunking deshabilitado, procesar directamente
+    if not use_chunking or tech_tokens <= max_tokens:
+        # Usar prompt estándar centralizado
+        inputText = apply_prompt(technicalText)
+        
+        # Tokenizar
+        inputs = tokenizer(inputText, return_tensors='pt', max_length=512, truncation=True)
+        
+        # Generar
+        with torch.no_grad():
+            outputs = model.generate(
+                inputs['input_ids'],
+                attention_mask=inputs['attention_mask'],
+                max_length=256,
+                num_beams=4,
+                early_stopping=True
+            )
+        
+        # Decodificar
+        generated = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        return generated
+    
+    # Texto largo: dividir en chunks y procesar cada uno
+    chunks = split_into_chunks(
+        technicalText,
+        tokenizer=tokenizer.encode,
+        max_tokens=max_tokens,
+        overlap=50
+    )
+    
+    if len(chunks) == 1:
+        # Solo un chunk, procesar normalmente
+        inputText = apply_prompt(chunks[0])
+        inputs = tokenizer(inputText, return_tensors='pt', max_length=512, truncation=True)
+        with torch.no_grad():
+            outputs = model.generate(
+                inputs['input_ids'],
+                attention_mask=inputs['attention_mask'],
+                max_length=256,
+                num_beams=4,
+                early_stopping=True
+            )
+        return tokenizer.decode(outputs[0], skip_special_tokens=True)
+    
+    # Múltiples chunks: generar PLS para cada uno y combinar
+    generated_chunks = []
+    for i, chunk in enumerate(chunks):
+        inputText = apply_prompt(chunk)
+        inputs = tokenizer(inputText, return_tensors='pt', max_length=512, truncation=True)
+        
+        with torch.no_grad():
+            outputs = model.generate(
+                inputs['input_ids'],
+                attention_mask=inputs['attention_mask'],
+                max_length=256,
+                num_beams=4,
+                early_stopping=True
+            )
+        
+        chunk_pls = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        generated_chunks.append(chunk_pls)
+    
+    # Combinar chunks generados
+    # Estrategia simple: unir con espacios y eliminar duplicados cercanos
+    combined = ' '.join(generated_chunks)
+    
+    # Limpiar: eliminar repeticiones excesivas de palabras
+    words = combined.split()
+    cleaned_words = []
+    prev_word = None
+    for word in words:
+        if word != prev_word or (prev_word and len(cleaned_words) > 0 and cleaned_words[-1] != word):
+            cleaned_words.append(word)
+        prev_word = word
+    
+    return ' '.join(cleaned_words)
 
-def calculateROUGE(predictions, references):
-    """Calcula métricas ROUGE."""
-    if not ROUGE_AVAILABLE:
-        return None
-    
-    print("Calculando ROUGE...")
-    scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
-    
-    rougeScores = []
-    for pred, ref in tqdm(zip(predictions, references), total=len(predictions)):
-        scores = scorer.score(ref, pred)
-        rougeScores.append({
-            'rouge1': scores['rouge1'].fmeasure,
-            'rouge2': scores['rouge2'].fmeasure,
-            'rougeL': scores['rougeL'].fmeasure
-        })
-    
-    # Promedios
-    avgRouge1 = sum([r['rouge1'] for r in rougeScores]) / len(rougeScores)
-    avgRouge2 = sum([r['rouge2'] for r in rougeScores]) / len(rougeScores)
-    avgRougeL = sum([r['rougeL'] for r in rougeScores]) / len(rougeScores)
-    
-    return {
-        'rouge1': avgRouge1,
-        'rouge2': avgRouge2,
-        'rougeL': avgRougeL,
-        'individual_scores': rougeScores
-    }
-
-def calculateBERTScore(predictions, references):
-    """Calcula BERTScore."""
-    if not BERTSCORE_AVAILABLE:
-        return None
-    
-    print("Calculando BERTScore...")
-    
-    # Calcular en batches
-    P, R, F1 = score(predictions, references, lang='en', verbose=True)
-    
-    avgP = P.mean().item()
-    avgR = R.mean().item()
-    avgF1 = F1.mean().item()
-    
-    return {
-        'precision': avgP,
-        'recall': avgR,
-        'f1': avgF1
-    }
 
 def main():
     """Función principal de evaluación."""
@@ -134,6 +155,19 @@ def main():
     
     # Cargar datos de test
     testPairs = loadSyntheticPairs()
+    
+    # ANÁLISIS DE LONGITUDES DEL TEST SET
+    print("\n" + "="*80)
+    print("ANÁLISIS DE LONGITUDES DEL TEST SET")
+    print("="*80)
+    
+    analyze_lengths_for_training(
+        pairs=testPairs,
+        tokenizer=tokenizer,
+        max_length_source=400,
+        save_report=True,
+        output_dir=Path('models/t5_generator')
+    )
     
     # Limitar para evaluación rápida (cambiar por todas si quieres)
     print(f"\nEvaluando con {min(100, len(testPairs))} ejemplos...")
@@ -156,43 +190,125 @@ def main():
     
     print(f"\nGeneración completada: {len(predictions)} ejemplos")
     
-    # Calcular métricas
-    results = {}
+    # Preparar sources para SARI (textos técnicos originales)
+    sources = [pair['texto_tecnico'] for pair in testSample]
+    
+    # Calcular TODAS las métricas
+    print("\n" + "="*80)
+    print("CALCULANDO MÉTRICAS COMPLETAS")
+    print("="*80)
+    
+    results = calculate_all_metrics(
+        predictions=predictions,
+        references=references,
+        sources=sources,
+        include_readability=True
+    )
+    
+    # Mostrar resultados
+    print("\n" + "="*80)
+    print("RESULTADOS DE EVALUACIÓN")
+    print("="*80)
     
     # ROUGE
-    if ROUGE_AVAILABLE:
-        rougeResults = calculateROUGE(predictions, references)
-        if rougeResults:
-            results['rouge'] = {
-                'rouge1': float(rougeResults['rouge1']),
-                'rouge2': float(rougeResults['rouge2']),
-                'rougeL': float(rougeResults['rougeL'])
-            }
-            
-            print(f"\n=== RESULTADOS ROUGE ===")
-            print(f"ROUGE-1: {rougeResults['rouge1']:.4f}")
-            print(f"ROUGE-2: {rougeResults['rouge2']:.4f}")
-            print(f"ROUGE-L: {rougeResults['rougeL']:.4f}")
+    if 'rouge' in results:
+        print(f"\n=== ROUGE ===")
+        print(f"ROUGE-1 F1: {results['rouge']['rouge1_f']:.4f}")
+        print(f"ROUGE-2 F1: {results['rouge']['rouge2_f']:.4f}")
+        print(f"ROUGE-L F1: {results['rouge']['rougeL_f']:.4f}")
+        print(f"ROUGE-Lsum F1: {results['rouge']['rougeLsum_f']:.4f}")
     
-    # BERTScore
-    if BERTSCORE_AVAILABLE:
-        bertResults = calculateBERTScore(predictions, references)
-        if bertResults:
-            results['bertscore'] = {
-                'precision': float(bertResults['precision']),
-                'recall': float(bertResults['recall']),
-                'f1': float(bertResults['f1'])
-            }
-            
-            print(f"\n=== RESULTADOS BERTScore ===")
-            print(f"Precision: {bertResults['precision']:.4f}")
-            print(f"Recall: {bertResults['recall']:.4f}")
-            print(f"F1: {bertResults['f1']:.4f}")
+    # BLEU
+    if 'bleu' in results:
+        print(f"\n=== BLEU ===")
+        print(f"BLEU-1: {results['bleu']['bleu1']:.4f}")
+        print(f"BLEU-2: {results['bleu']['bleu2']:.4f}")
+        print(f"BLEU-3: {results['bleu']['bleu3']:.4f}")
+        print(f"BLEU-4: {results['bleu']['bleu4']:.4f}")
     
-    # Guardar resultados
+    # SARI
+    if 'sari' in results:
+        print(f"\n=== SARI ===")
+        print(f"SARI: {results['sari']['sari']:.4f}")
+        print(f"  Keep: {results['sari']['keep']:.4f}")
+        print(f"  Add: {results['sari']['add']:.4f}")
+        print(f"  Delete: {results['sari']['delete']:.4f}")
+    
+    # BERTScore (Best Score)
+    if 'bertscore' in results:
+        print(f"\n=== BERTScore (Best Score) ===")
+        print(f"Precision: {results['bertscore']['precision']:.4f}")
+        print(f"Recall: {results['bertscore']['recall']:.4f}")
+        print(f"F1: {results['bertscore']['f1']:.4f}")
+    
+    # Readability
+    if 'readability' in results:
+        print(f"\n=== MÉTRICAS DE LEGIBILIDAD ===")
+        read = results['readability']
+        
+        if 'flesch_reading_ease' in read:
+            print(f"Flesch Reading Ease: {read['flesch_reading_ease']:.2f}")
+            print(f"  (Mayor = más fácil de leer, rango 0-100)")
+        
+        if 'flesch_kincaid' in read:
+            print(f"Flesch-Kincaid Grade Level: {read['flesch_kincaid']['avg_grade_level']:.2f}")
+            print(f"  (Años de educación necesarios)")
+        
+        if 'gunning_fog' in read:
+            print(f"Gunning Fog Index: {read['gunning_fog']['avg_grade_level']:.2f}")
+        
+        if 'dale_chall' in read:
+            print(f"Dale-Chall Score: {read['dale_chall']['avg_score']:.2f}")
+        
+        if 'ari' in read:
+            print(f"Automated Readability Index (ARI): {read['ari']['avg_grade_level']:.2f}")
+        
+        if 'smog' in read:
+            print(f"SMOG Index: {read['smog']['avg_grade_level']:.2f}")
+    
+    # Preparar resultados para guardar (solo valores principales)
+    results_to_save = {}
+    
+    if 'rouge' in results:
+        results_to_save['rouge'] = {
+            'rouge1_f': results['rouge']['rouge1_f'],
+            'rouge2_f': results['rouge']['rouge2_f'],
+            'rougeL_f': results['rouge']['rougeL_f'],
+            'rougeLsum_f': results['rouge']['rougeLsum_f']
+        }
+    
+    if 'bleu' in results:
+        results_to_save['bleu'] = {
+            'bleu1': results['bleu']['bleu1'],
+            'bleu2': results['bleu']['bleu2'],
+            'bleu3': results['bleu']['bleu3'],
+            'bleu4': results['bleu']['bleu4']
+        }
+    
+    if 'sari' in results:
+        results_to_save['sari'] = {
+            'sari': results['sari']['sari'],
+            'keep': results['sari']['keep'],
+            'add': results['sari']['add'],
+            'delete': results['sari']['delete']
+        }
+    
+    if 'bertscore' in results:
+        results_to_save['bertscore'] = {
+            'precision': results['bertscore']['precision'],
+            'recall': results['bertscore']['recall'],
+            'f1': results['bertscore']['f1']
+        }
+    
+    if 'readability' in results:
+        results_to_save['readability'] = results['readability']
+    
+    # Guardar resultados (versión simplificada + completos)
+    results_to_save['full_results'] = results  # Incluir resultados completos
+    
     outputPath = Path('models/t5_generator/evaluation_results.json')
     with open(outputPath, 'w') as f:
-        json.dump(results, f, indent=2)
+        json.dump(results_to_save, f, indent=2, default=str)
     
     print(f"\nResultados guardados en: {outputPath}")
     
@@ -211,18 +327,25 @@ def main():
     
     print("Ejemplos guardados en: models/t5_generator/evaluation_examples.json")
     
-    print("\n=== RESUMEN ===")
-    if 'rouge' in results:
-        print(f"ROUGE-L: {results['rouge']['rougeL']:.4f}")
-    if 'bertscore' in results:
-        print(f"BERTScore F1: {results['bertscore']['f1']:.4f}")
+    print("\n" + "="*80)
+    print("RESUMEN")
+    print("="*80)
+    
+    if 'rouge' in results_to_save:
+        print(f"ROUGE-L: {results_to_save['rouge']['rougeL_f']:.4f}")
+    if 'bleu' in results_to_save:
+        print(f"BLEU-4: {results_to_save['bleu']['bleu4']:.4f}")
+    if 'sari' in results_to_save:
+        print(f"SARI: {results_to_save['sari']['sari']:.4f}")
+    if 'bertscore' in results_to_save:
+        print(f"BERTScore F1 (Best Score): {results_to_save['bertscore']['f1']:.4f}")
     
     # Target
     targetRougeL = 0.35
-    if 'rouge' in results and results['rouge']['rougeL'] >= targetRougeL:
-        print(f"\nTARGET CUMPLIDO: ROUGE-L {results['rouge']['rougeL']:.4f} >= {targetRougeL}")
-    elif 'rouge' in results:
-        print(f"\nTARGET NO CUMPLIDO: ROUGE-L {results['rouge']['rougeL']:.4f} < {targetRougeL}")
+    if 'rouge' in results_to_save and results_to_save['rouge']['rougeL_f'] >= targetRougeL:
+        print(f"\n✅ TARGET CUMPLIDO: ROUGE-L {results_to_save['rouge']['rougeL_f']:.4f} >= {targetRougeL}")
+    elif 'rouge' in results_to_save:
+        print(f"\n❌ TARGET NO CUMPLIDO: ROUGE-L {results_to_save['rouge']['rougeL_f']:.4f} < {targetRougeL}")
 
 if __name__ == "__main__":
     main()

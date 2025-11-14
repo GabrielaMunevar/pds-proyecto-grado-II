@@ -33,6 +33,8 @@ bert-score>=0.3.13
 nltk>=3.8
 textstat>=0.7.3
 evaluate>=0.4.0
+py-readability-metrics>=1.4.9
+sacrebleu>=2.3.0
 
 # ===============================================
 # VERSIONING AND REPRODUCIBILITY

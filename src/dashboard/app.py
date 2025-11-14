@@ -12,6 +12,12 @@ from transformers import T5Tokenizer, T5ForConditionalGeneration
 from pathlib import Path
 import time
 from datetime import datetime
+import sys
+
+# Importar utilidades y configuración
+sys.path.append(str(Path(__file__).parent.parent))
+from utils.text_chunking import split_into_chunks
+from config import apply_prompt, get_prompt
 
 # ============================================================================
 # CONFIGURACIÓN DE PÁGINA
@@ -250,30 +256,93 @@ with tab1:
                 with st.spinner("Generating with T5..."):
                     start_time = time.time()
                     
-                    # Generar
-                    prefix = "simplify: "
-                    input_with_prefix = prefix + input_text
+                    # Verificar si el texto es largo y necesita chunking
+                    tech_tokens = len(tokenizer.encode(input_text, add_special_tokens=False))
+                    use_chunking = tech_tokens > 400
                     
-                    inputs = tokenizer(
-                        input_with_prefix,
-                        return_tensors='pt',
-                        max_length=512,
-                        truncation=True,
-                        padding=True
-                    )
-                    
-                    with torch.no_grad():
-                        outputs = model.generate(
-                            inputs['input_ids'],
-                            attention_mask=inputs['attention_mask'],
-                            max_length=max_length,
-                            num_beams=num_beams,
-                            early_stopping=True,
-                            length_penalty=1.1,
-                            do_sample=False
+                    if use_chunking:
+                        st.info(f"📄 Long text detected ({tech_tokens} tokens). Using chunking strategy...")
+                        
+                        # Dividir en chunks
+                        chunks = split_into_chunks(
+                            input_text,
+                            tokenizer=tokenizer.encode,
+                            max_tokens=400,
+                            overlap=50
                         )
+                        
+                        st.info(f"Divided into {len(chunks)} chunks")
+                        
+                        # Generar PLS para cada chunk
+                        generated_chunks = []
+                        progress_bar = st.progress(0)
+                        
+                        for i, chunk in enumerate(chunks):
+                            # Usar prompt estándar centralizado
+                            input_with_prefix = apply_prompt(chunk)
+                            
+                            inputs = tokenizer(
+                                input_with_prefix,
+                                return_tensors='pt',
+                                max_length=512,
+                                truncation=True,
+                                padding=True
+                            )
+                            
+                            with torch.no_grad():
+                                outputs = model.generate(
+                                    inputs['input_ids'],
+                                    attention_mask=inputs['attention_mask'],
+                                    max_length=max_length,
+                                    num_beams=num_beams,
+                                    early_stopping=True,
+                                    length_penalty=1.1,
+                                    do_sample=False
+                                )
+                            
+                            chunk_result = tokenizer.decode(outputs[0], skip_special_tokens=True)
+                            generated_chunks.append(chunk_result)
+                            progress_bar.progress((i + 1) / len(chunks))
+                        
+                        # Combinar chunks generados
+                        combined = ' '.join(generated_chunks)
+                        
+                        # Limpiar repeticiones
+                        words = combined.split()
+                        cleaned_words = []
+                        prev_word = None
+                        for word in words:
+                            if word != prev_word:
+                                cleaned_words.append(word)
+                            prev_word = word
+                        
+                        result = ' '.join(cleaned_words)
+                    else:
+                        # Texto corto: procesar directamente
+                        # Usar prompt estándar centralizado
+                        input_with_prefix = apply_prompt(input_text)
+                        
+                        inputs = tokenizer(
+                            input_with_prefix,
+                            return_tensors='pt',
+                            max_length=512,
+                            truncation=True,
+                            padding=True
+                        )
+                        
+                        with torch.no_grad():
+                            outputs = model.generate(
+                                inputs['input_ids'],
+                                attention_mask=inputs['attention_mask'],
+                                max_length=max_length,
+                                num_beams=num_beams,
+                                early_stopping=True,
+                                length_penalty=1.1,
+                                do_sample=False
+                            )
+                        
+                        result = tokenizer.decode(outputs[0], skip_special_tokens=True)
                     
-                    result = tokenizer.decode(outputs[0], skip_special_tokens=True)
                     elapsed = time.time() - start_time
                     
                     # Mostrar resultado
