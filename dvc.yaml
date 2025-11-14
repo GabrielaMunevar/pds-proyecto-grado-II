@@ -24,4 +24,30 @@ stages:
       - data/processed/train.csv
       - data/processed/test.csv
 
+  train_classifier:
+    cmd: python src/models/train_classifier.py
+    deps:
+      - src/models/train_classifier.py
+      - data/processed/train.csv
+      - data/processed/test.csv
+    params:
+      - classifier
+    outs:
+      - models/baseline_classifier/classifier.pkl
+      - models/baseline_classifier/vectorizer.pkl
+      - models/baseline_classifier/metrics.json
+
+  train_t5_generator:
+    cmd: python src/models/train_t5_generator.py
+    deps:
+      - src/models/train_t5_generator.py
+      - src/data/create_synthetic_pairs.py
+      - data/processed/synthetic_pairs/synthetic_pairs.jsonl
+    params:
+      - generator
+    outs:
+      - models/t5_generator/model
+      - models/t5_generator/tokenizer
+      - models/t5_generator/metrics.json
+
 

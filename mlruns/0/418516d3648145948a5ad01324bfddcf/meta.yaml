@@ -1,0 +1,14 @@
+artifact_uri: file:///C:/Users/gabri/Documents/Maestr%C3%ADa/Proyecto%20de%20grado%202/PROYECTO%20DE%20GRADO/mlruns/0/418516d3648145948a5ad01324bfddcf/artifacts
+end_time: 1761499349433
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 418516d3648145948a5ad01324bfddcf
+run_name: models/t5_generator
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1761499189141
+status: 3
+tags: []
+user_id: gabri
