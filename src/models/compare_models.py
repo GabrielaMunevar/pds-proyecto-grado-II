@@ -15,6 +15,11 @@ from pathlib import Path
 from transformers import T5Tokenizer, T5ForConditionalGeneration
 from tqdm import tqdm
 import pandas as pd
+import sys
+
+# Importar configuración
+sys.path.append(str(Path(__file__).parent.parent))
+from config import apply_prompt, get_prompt
 
 def load_model(model_path, tokenizer_path, device):
     """Cargar modelo y tokenizer"""
@@ -32,8 +37,8 @@ def load_model(model_path, tokenizer_path, device):
 
 def generate_pls(model, tokenizer, input_text, device, max_length=256):
     """Generar PLS con modelo"""
-    prefix = "simplify: "
-    full_input = prefix + input_text
+    # Usar prompt estándar centralizado
+    full_input = apply_prompt(input_text)
     
     inputs = tokenizer(
         full_input,

@@ -6,6 +6,7 @@
 *.parquet
 *.jsonl
 *.json
+/docs/*
 
 # Excepciones (archivos de configuración que SÍ queremos versionar)
 !params.yaml

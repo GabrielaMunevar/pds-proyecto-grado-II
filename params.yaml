@@ -112,7 +112,11 @@ generator:
     bias: "none"
   
   # Prompt engineering
-  prompt_template: "Summarize the following clinical trial in plain language, explaining the population, intervention, comparator, and outcomes using everyday words. Avoid jargon and do not copy exact phrases:\n\n{text}\n\nPlain Language Summary:"
+  # NOTA: El prompt estándar está centralizado en src/config.py
+  # Este valor es solo para referencia/documentación
+  # El código usa: from config import apply_prompt
+  prompt_template: "simplify medical text into plain language: "
+  prompt_source: "src/config.py"  # Ubicación del prompt centralizado
 
 # ===============================================
 # SEMI-SUPERVISADO - Bucle iterativo
