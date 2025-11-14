@@ -22,6 +22,7 @@ stages:
       - split
     outs:
       - data/processed/train.csv
+      - data/processed/dev.csv
       - data/processed/test.csv
 
   train_classifier:
