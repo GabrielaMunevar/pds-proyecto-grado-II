@@ -8,7 +8,7 @@ PYTHON := python
 PIP := pip
 DVC := dvc
 S3_BUCKET := pds-pls-data-prod
-REGION := us-west-2
+REGION := us-east-1
 
 help:
 	@echo "📚 Comandos disponibles:"
@@ -17,6 +17,7 @@ help:
 	@echo "  make setup-dvc    - Configurar DVC con S3"
 	@echo "  make pull         - Descargar datos desde S3"
 	@echo "  make push         - Subir datos/modelos a S3"
+	@echo "  make upload-s3    - Subir datos directamente a S3 (sin DVC)"
 	@echo "  make repro        - Ejecutar pipeline completo"
 	@echo "  make repro-f      - Ejecutar pipeline forzando re-ejecución"
 	@echo ""
@@ -63,6 +64,17 @@ pull:
 push:
 	@echo "⬆️  Subiendo datos/modelos a S3..."
 	$(DVC) push
+
+# Upload directamente a S3 (sin DVC)
+upload-s3:
+	@echo "⬆️  Subiendo datos directamente a S3..."
+	@if [ -f "scripts/upload_data_to_s3.ps1" ]; then \
+		powershell -ExecutionPolicy Bypass -File scripts/upload_data_to_s3.ps1 -BucketName $(S3_BUCKET) -Region $(REGION); \
+	elif [ -f "scripts/upload_data_to_s3.sh" ]; then \
+		bash scripts/upload_data_to_s3.sh $(S3_BUCKET) $(REGION); \
+	else \
+		echo "❌ Script de subida no encontrado"; \
+	fi
 
 status:
 	@echo "📊 Estado de DVC:"

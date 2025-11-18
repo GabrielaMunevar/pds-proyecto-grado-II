@@ -1,0 +1,30 @@
+# API Framework
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0
+
+# ML/NLP Core
+torch>=2.0.0
+transformers>=4.30.0
+sentencepiece>=0.1.99
+
+# LangChain para chunking semántico
+langchain>=0.1.0
+langchain-text-splitters>=0.0.1
+
+# Métricas
+rouge-score>=0.1.2
+sacrebleu>=2.3.0
+bert-score>=0.3.13
+textstat>=0.7.3
+
+# Utilidades
+python-multipart>=0.0.6
+python-json-logger>=2.0.7
+
+# Testing (desarrollo)
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-asyncio>=0.21.0
+httpx>=0.24.0  # Para TestClient async
+

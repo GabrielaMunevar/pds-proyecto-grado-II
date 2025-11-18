@@ -33,7 +33,7 @@ from config import (
 T5_DEFAULT_CONFIG = {
     'model_name': 't5-base',
     'max_context': 512,
-    'max_length_source': 400,  # Dejando margen para el prompt (~20-30 tokens)
+    'max_length_source': 400,  
     'max_length_target': 256,
     'chunking': {
         'max_tokens': 400,
@@ -51,7 +51,7 @@ T5_DEFAULT_CONFIG = {
         'weight_decay': 0.01,
         'warmup_steps': 500,
         'gradient_accumulation_steps': 2,
-        'fp16': True,  # Usar FP16 si hay GPU disponible
+        'fp16': True,  
         'save_total_limit': 3,
         'eval_strategy': 'epoch',
         'save_strategy': 'epoch'
@@ -65,7 +65,7 @@ T5_MODEL_CONFIGS = {
         'model_name': 't5-small',
         'training': {
             **T5_DEFAULT_CONFIG['training'],
-            'batch_size': 16,  # Más pequeño, puede usar batches más grandes
+            'batch_size': 16,  
         }
     },
     't5-base': {
@@ -81,10 +81,10 @@ T5_MODEL_CONFIGS = {
         'model_name': 't5-large',
         'training': {
             **T5_DEFAULT_CONFIG['training'],
-            'batch_size': 2,  # Batch pequeño para T5-large
-            'gradient_accumulation_steps': 16,  # Más acumulación para batch efectivo
-            'eval_batch_size': 1,  # Batch muy pequeño para evaluación
-            'eval_accumulation_steps': 8,  # Acumulación durante evaluación
+            'batch_size': 2, 
+            'gradient_accumulation_steps': 16,  
+            'eval_batch_size': 1,  
+            'eval_accumulation_steps': 8,  
         }
     }
 }

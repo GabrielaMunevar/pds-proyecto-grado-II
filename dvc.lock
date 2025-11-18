@@ -51,8 +51,8 @@ stages:
       size: 215483036
     - path: src/data/split_dataset.py
       hash: md5
-      md5: f4c77eec7db14faa89757f529e7f321d
-      size: 4711
+      md5: 55e057da3a3d64a4d45ce9e4ec57aec5
+      size: 11331
     params:
       params.yaml:
         split:
@@ -62,12 +62,134 @@ stages:
           - label
           random_seed: 42
           respect_existing_splits: true
+          create_dev: true
+          dev_size: 0.1
+          stratify_by_label: true
+          stratify_by_source: false
     outs:
+    - path: data/processed/dev.csv
+      hash: md5
+      md5: 9fd552175fa31a410b648ccfe246313b
+      size: 16079387
     - path: data/processed/test.csv
       hash: md5
       md5: 258d22566eb2ef6d330d7454279e6851
       size: 40055433
     - path: data/processed/train.csv
       hash: md5
-      md5: 40a506d703e97b665a9511c02cbbd91e
-      size: 166395045
+      md5: c39853ff575fe87059633ebfa7ad9de6
+      size: 150325432
+  train_classifier:
+    cmd: python src/models/train_classifier.py
+    deps:
+    - path: data/processed/test.csv
+      hash: md5
+      md5: 258d22566eb2ef6d330d7454279e6851
+      size: 40055433
+    - path: data/processed/train.csv
+      hash: md5
+      md5: c39853ff575fe87059633ebfa7ad9de6
+      size: 150325432
+    - path: src/models/train_classifier.py
+      hash: md5
+      md5: 0ce41a14121a8381b4d54bf5c9871df4
+      size: 11695
+    params:
+      params.yaml:
+        classifier:
+          model: tfidf_logreg
+          max_features: 10000
+          ngram_range:
+          - 1
+          - 2
+          min_df: 2
+          max_df: 0.95
+          max_iter: 1000
+          random_state: 42
+          class_weight: balanced
+          metric: f1_macro
+          target_f1: 0.85
+          use_gate: true
+          gate_threshold:
+    outs:
+    - path: models/baseline_classifier/classifier.pkl
+      hash: md5
+      md5: b2bb32a2577b2278a6f800b1541b1281
+      size: 81071
+    - path: models/baseline_classifier/metrics.json
+      hash: md5
+      md5: dd5ab58a98cf66e0ab0a006ae7ca7e12
+      size: 188
+    - path: models/baseline_classifier/vectorizer.pkl
+      hash: md5
+      md5: 34e947c9b26900e11fad6a04419752db
+      size: 20070613
+  train_t5_generator:
+    cmd: python src/models/train_t5_generator.py
+    deps:
+    - path: data/processed/synthetic_pairs_improved/synthetic_pairs.jsonl
+      hash: md5
+      md5: 593c1f86d85f0339ee40b18d51630c25
+      size: 127243813
+    - path: src/data/create_synthetic_pairs.py
+      hash: md5
+      md5: 0ee98209029acee73abdc953277221c8
+      size: 55540
+    - path: src/models/train_t5_generator.py
+      hash: md5
+      md5: de30c646ee8e1c67ffe1744c3115d2c4
+      size: 12894
+    params:
+      params.yaml:
+        generator:
+          base_model: facebook/bart-base
+          max_src_tokens: 1024
+          max_tgt_tokens: 256
+          truncation: true
+          padding: max_length
+          decoding:
+            strategy: beam_search
+            beam_size: 4
+            length_penalty: 1.1
+            no_repeat_ngram_size: 3
+            min_length: 50
+            max_length: 256
+            early_stopping: true
+          sft:
+            lr: 3e-05
+            epochs: 4
+            batch_size: 8
+            gradient_accumulation_steps: 4
+            warmup_ratio: 0.1
+            weight_decay: 0.01
+            fp16: true
+            save_steps: 1000
+            eval_steps: 500
+            logging_steps: 100
+            save_total_limit: 3
+          peft:
+            use_lora: false
+            r: 16
+            lora_alpha: 32
+            lora_dropout: 0.05
+            target_modules:
+            - q_proj
+            - v_proj
+            bias: none
+          prompt_template: 'simplify medical text into plain language: '
+          prompt_source: src/config.py
+    outs:
+    - path: models/t5_generator/metrics.json
+      hash: md5
+      md5: 952d23940b6edff1c6c86ef9e65b5df7
+      size: 198
+    - path: models/t5_generator/model
+      hash: md5
+      md5: 49549e375f5e8d32bb030ab172de4bc2.dir
+      size: 891646554
+      nfiles: 4
+    - path: models/t5_generator/tokenizer
+      hash: md5
+      md5: b692a57d6b1d9f6266a75aae0093a258.dir
+      size: 817668
+      nfiles: 4

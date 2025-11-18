@@ -43,7 +43,7 @@ stages:
     deps:
       - src/models/train_t5_generator.py
       - src/data/create_synthetic_pairs.py
-      - data/processed/synthetic_pairs/synthetic_pairs.jsonl
+      - data/processed/synthetic_pairs_improved/synthetic_pairs.jsonl
     params:
       - generator
     outs:

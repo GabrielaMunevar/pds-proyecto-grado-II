@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medical PLS Tool - Plain Language Summaries</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700;900&family=Roboto+Condensed:wght@300;400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="university-info">
+                    <p class="university-text">Maestría de Inteligencia Artificial</p>
+                    <p class="university-text">Universidad de los Andes</p>
+                </div>
+                <h1 class="logo">
+                    Medical PLS Tool
+                </h1>
+                <p class="tagline">Plain Language Summaries for Medical Text</p>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Tabs -->
+            <div class="tabs">
+                <button class="tab-button active" data-tab="classify">
+                    Classify Text
+                </button>
+                <button class="tab-button" data-tab="generate">
+                    Generate PLS
+                </button>
+            </div>
+
+            <!-- Classify Tab -->
+            <div id="classify-tab" class="tab-content active">
+                <div class="card">
+                    <h2 class="card-title">Classify Text as PLS or Technical</h2>
+                    <p class="card-description">Paste your text below to determine if it's already a Plain Language Summary or if it needs simplification.</p>
+                    
+                    <div class="form-group">
+                        <label for="classify-text">Text to Classify</label>
+                        <textarea 
+                            id="classify-text" 
+                            class="textarea" 
+                            rows="8" 
+                            placeholder="Enter text here... (minimum 10 characters)"
+                        ></textarea>
+                        <div class="char-count">
+                            <span id="classify-char-count">0</span> characters
+                        </div>
+                    </div>
+
+                    <button id="classify-btn" class="btn btn-primary">
+                        Classify Text
+                    </button>
+
+                    <div id="classify-result" class="result-container hidden">
+                        <div class="result-header">
+                            <h3>Classification Result</h3>
+                        </div>
+                        <div class="result-content">
+                            <div class="classification-badge" id="classification-badge">
+                                <span class="badge-icon"></span>
+                                <span class="badge-text"></span>
+                            </div>
+                            <div class="confidence-bar">
+                                <div class="confidence-label">Confidence: <span id="confidence-value">0%</span></div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" id="confidence-progress"></div>
+                                </div>
+                            </div>
+                            <div class="metrics-grid">
+                                <div class="metric-item">
+                                    <span class="metric-label">Flesch Reading Ease</span>
+                                    <span class="metric-value" id="fre-value">-</span>
+                                </div>
+                                <div class="metric-item">
+                                    <span class="metric-label">Grade Level</span>
+                                    <span class="metric-value" id="fkg-value">-</span>
+                                </div>
+                                <div class="metric-item">
+                                    <span class="metric-label">Avg Word Length</span>
+                                    <span class="metric-value" id="awl-value">-</span>
+                                </div>
+                                <div class="metric-item">
+                                    <span class="metric-label">Technical Terms</span>
+                                    <span class="metric-value" id="tech-value">-</span>
+                                </div>
+                            </div>
+                            <div class="reasoning-box">
+                                <strong>Reasoning:</strong>
+                                <p id="reasoning-text"></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Generate Tab -->
+            <div id="generate-tab" class="tab-content">
+                <div class="card">
+                    <h2 class="card-title">Generate Plain Language Summary</h2>
+                    <p class="card-description">Convert technical medical text into an easy-to-understand Plain Language Summary.</p>
+                    
+                    <div class="form-group">
+                        <label for="generate-text">Technical Medical Text</label>
+                        <textarea 
+                            id="generate-text" 
+                            class="textarea" 
+                            rows="8" 
+                            placeholder="Enter technical medical text here... (minimum 10 characters)"
+                        ></textarea>
+                        <div class="char-count">
+                            <span id="generate-char-count">0</span> characters
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="max-length">Max Length (tokens)</label>
+                            <input type="number" id="max-length" class="input" value="256" min="50" max="512">
+                        </div>
+                        <div class="form-group">
+                            <label for="num-beams">Beam Search</label>
+                            <input type="number" id="num-beams" class="input" value="4" min="1" max="10">
+                        </div>
+                    </div>
+
+                    <button id="generate-btn" class="btn btn-primary">
+                        Generate PLS
+                    </button>
+
+                    <div id="generate-result" class="result-container hidden">
+                        <div class="result-header">
+                            <h3>Generated PLS</h3>
+                            <div class="result-meta">
+                                <span class="meta-item">
+                                    <span id="generation-time">-</span>
+                                </span>
+                                <span class="meta-item">
+                                    <span id="num-chunks">-</span> chunks
+                                </span>
+                            </div>
+                        </div>
+                        <div class="result-content">
+                            <div class="output-box">
+                                <div class="output-header">
+                                    <span>Generated Summary</span>
+                                    <button class="copy-btn" id="copy-pls-btn" title="Copy to clipboard">
+                                        Copy
+                                    </button>
+                                </div>
+                                <div class="output-text" id="generated-pls-text"></div>
+                            </div>
+                            <div class="stats-grid">
+                                <div class="stat-item">
+                                    <span class="stat-label">Input Tokens</span>
+                                    <span class="stat-value" id="input-tokens">-</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Output Tokens</span>
+                                    <span class="stat-value" id="output-tokens">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Medical PLS Tool v1.0.0 | Powered by T5-base</p>
+            <p class="footer-university">Maestría de Inteligencia Artificial - Universidad de los Andes</p>
+        </footer>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay hidden">
+        <div class="spinner"></div>
+        <p class="loading-text">Processing...</p>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
+

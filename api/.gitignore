@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# FastAPI
+.env
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Modelos (no subir el modelo a Git)
+../models/t5_base/*
+!../models/t5_base/.gitkeep
+
+# Resultados y caché
+results/
+checkpoints/
+logs/
+*.cache
+
+# Docker
+.dockerignore
+
