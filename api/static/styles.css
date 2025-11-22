@@ -553,6 +553,7 @@ label {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
 }
 
 .stat-item {
@@ -576,6 +577,123 @@ label {
     font-size: var(--font-size-2xl);
     font-weight: 700;
     color: var(--primary);
+}
+
+/* ============================================================================
+   METRICS SECTION
+   ============================================================================ */
+
+.metrics-section {
+    margin-top: var(--spacing-xl);
+    padding: var(--spacing-lg);
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    border: 2px solid var(--border);
+}
+
+.metrics-section.hidden {
+    display: none;
+}
+
+.metrics-header {
+    margin-bottom: var(--spacing-lg);
+    padding-bottom: var(--spacing-md);
+    border-bottom: 2px solid var(--border);
+}
+
+.metrics-header h4 {
+    font-size: var(--font-size-xl);
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.metrics-group {
+    margin-bottom: var(--spacing-xl);
+}
+
+.metrics-group:last-child {
+    margin-bottom: 0;
+}
+
+.metrics-group-title {
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: var(--spacing-md);
+    padding-left: var(--spacing-sm);
+    border-left: 4px solid var(--primary);
+}
+
+.metric-item {
+    display: flex;
+    flex-direction: column;
+    padding: var(--spacing-md);
+    background: var(--bg-secondary);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    transition: var(--transition);
+}
+
+.metric-item:hover {
+    border-color: var(--primary);
+    box-shadow: var(--shadow-sm);
+}
+
+.metric-label {
+    font-size: var(--font-size-xs);
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 500;
+}
+
+.metric-value {
+    font-size: var(--font-size-2xl);
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: var(--spacing-xs);
+}
+
+.metric-value.metric-good {
+    color: var(--success);
+}
+
+.metric-value.metric-medium {
+    color: var(--warning);
+}
+
+.metric-value.metric-poor {
+    color: var(--danger);
+}
+
+.metric-hint,
+.metric-description {
+    font-size: var(--font-size-xs);
+    color: var(--text-tertiary);
+    font-style: italic;
+    margin-top: 0.25rem;
+    display: block;
+}
+
+.input-hint {
+    font-size: var(--font-size-xs);
+    color: var(--text-tertiary);
+    margin-top: 0.25rem;
+    display: block;
+}
+
+.metrics-group-description {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    margin-bottom: 1rem;
+    line-height: 1.5;
+}
+
+.metric-description {
+    font-size: var(--font-size-xs);
+    color: var(--text-tertiary);
+    font-style: italic;
 }
 
 /* ============================================================================

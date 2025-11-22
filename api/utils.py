@@ -20,12 +20,26 @@ except ImportError:
 # ============================================================================
 # CONFIGURACIÓN
 # ============================================================================
-
-TASK_PREFIX = "simplify medical text: "
-MAX_INPUT_LENGTH = 512
-CHUNK_SIZE = 400
-CHUNK_OVERLAP = 50
-SEPARATORS = ["\n\n", "\n", ". ", " "]
+# Importar configuración centralizada
+try:
+    from config import (
+        TASK_PREFIX,
+        MAX_INPUT_LENGTH,
+        CHUNK_SIZE,
+        CHUNK_OVERLAP,
+        SEPARATORS,
+        DEFAULT_MAX_LENGTH,
+        DEFAULT_NUM_BEAMS
+    )
+except ImportError:
+    # Fallback si config.py no está disponible
+    TASK_PREFIX = "simplify medical text into plain language: "
+    MAX_INPUT_LENGTH = 512
+    CHUNK_SIZE = 400
+    CHUNK_OVERLAP = 50
+    SEPARATORS = ["\n\n", "\n", ". ", " "]
+    DEFAULT_MAX_LENGTH = 256
+    DEFAULT_NUM_BEAMS = 4
 
 # ============================================================================
 # CHUNKING SEMÁNTICO
@@ -267,15 +281,62 @@ def calcular_todas_las_metricas(source: str, prediction: str, reference: str) ->
 # CLASIFICACIÓN PLS / NON-PLS
 # ============================================================================
 
+# Variables globales para el clasificador
+CLASSIFIER = None
+VECTORIZER = None
+
+def load_classifier():
+    """
+    Carga el modelo clasificador entrenado.
+    
+    Returns:
+        (classifier, vectorizer) o (None, None) si no está disponible
+    """
+    global CLASSIFIER, VECTORIZER
+    
+    if CLASSIFIER is not None and VECTORIZER is not None:
+        return CLASSIFIER, VECTORIZER
+    
+    try:
+        import joblib
+        from pathlib import Path
+        
+        model_dir = Path('models/baseline_classifier')
+        
+        # Intentar rutas relativas desde api/
+        possible_paths = [
+            model_dir,  # Desde raíz del proyecto
+            Path('../models/baseline_classifier'),  # Desde api/
+            Path('../../models/baseline_classifier'),  # Desde subdirectorio
+        ]
+        
+        classifier_path = None
+        vectorizer_path = None
+        
+        for base_path in possible_paths:
+            if (base_path / 'classifier.pkl').exists() and (base_path / 'vectorizer.pkl').exists():
+                classifier_path = base_path / 'classifier.pkl'
+                vectorizer_path = base_path / 'vectorizer.pkl'
+                break
+        
+        if classifier_path is None or vectorizer_path is None:
+            return None, None
+        
+        VECTORIZER = joblib.load(vectorizer_path)
+        CLASSIFIER = joblib.load(classifier_path)
+        
+        return CLASSIFIER, VECTORIZER
+        
+    except Exception as e:
+        print(f"Error loading classifier: {e}")
+        return None, None
+
 def clasificar_texto(texto: str) -> Dict:
     """
     Clasifica si un texto es PLS (Plain Language Summary) o texto técnico.
     
-    Usa heurísticas basadas en:
-    - Flesch Reading Ease (legibilidad)
-    - Flesch-Kincaid Grade (nivel educativo)
-    - Longitud promedio de palabras
-    - Presencia de términos técnicos complejos
+    Intenta usar el modelo clasificador entrenado. Si no está disponible,
+    usa heurísticas basadas en métricas de legibilidad.
     
     Args:
         texto: Texto a clasificar
@@ -287,6 +348,7 @@ def clasificar_texto(texto: str) -> Dict:
             - flesch_reading_ease: float
             - flesch_kincaid_grade: float
             - avg_word_length: float
+            - technical_terms_count: int
             - reasoning: str
     """
     if not texto or len(texto.strip()) < 50:
@@ -297,10 +359,93 @@ def clasificar_texto(texto: str) -> Dict:
             "flesch_kincaid_grade": 0.0,
             "avg_word_length": 0.0,
             "technical_terms_count": 0,
-            "reasoning": "Text too short to classify"
+            "reasoning": "Text too short to classify (minimum 50 characters required)"
         }
     
-    # Calcular métricas de legibilidad
+    # Intentar cargar y usar el clasificador entrenado
+    clf, vectorizer = load_classifier()
+    
+    if clf is not None and vectorizer is not None:
+        try:
+            # Usar modelo entrenado
+            X = vectorizer.transform([texto])
+            proba = clf.predict_proba(X)[0]
+            
+            # Probabilidad de ser PLS (clase 1)
+            pls_prob = proba[1] if len(proba) > 1 else proba[0]
+            is_pls = clf.predict(X)[0] == 'pls'
+            
+            # Calcular métricas adicionales para el reasoning
+            try:
+                fre = textstat.flesch_reading_ease(texto)
+                fkg = textstat.flesch_kincaid_grade(texto)
+            except:
+                fre = 0.0
+                fkg = 20.0
+            
+            words = texto.split()
+            avg_word_length = sum(len(word) for word in words) / len(words) if words else 0
+            
+            # Contar términos técnicos
+            technical_indicators = [
+                'randomized', 'controlled', 'trial', 'statistically', 'significant',
+                'methodology', 'intervention', 'efficacy', 'placebo', 'cohort',
+                'retrospective', 'prospective', 'multivariate', 'regression',
+                'confidence interval', 'p-value', 'hypothesis', 'protocol'
+            ]
+            text_lower = texto.lower()
+            technical_count = sum(1 for term in technical_indicators if term in text_lower)
+            
+            # Create user-friendly reasoning
+            prob_percent = pls_prob * 100
+            if pls_prob >= 0.7:
+                prob_desc = "high"
+            elif pls_prob >= 0.5:
+                prob_desc = "moderate"
+            else:
+                prob_desc = "low"
+            
+            if fre >= 60:
+                readability_desc = "easy to read"
+            elif fre >= 50:
+                readability_desc = "moderately readable"
+            elif fre >= 30:
+                readability_desc = "difficult to read"
+            elif fre >= 0:
+                readability_desc = "very difficult to read"
+            else:
+                readability_desc = "extremely difficult to read"
+            
+            if fkg <= 8:
+                grade_desc = f"grade {fkg:.0f} level (easy)"
+            elif fkg <= 12:
+                grade_desc = f"grade {fkg:.0f} level (moderate)"
+            else:
+                grade_desc = f"grade {fkg:.0f} level (difficult)"
+            
+            # Format FRE score appropriately
+            if fre < 0:
+                fre_display = f"{fre:.0f} (negative scores indicate extremely complex text)"
+            else:
+                fre_display = f"{fre:.0f}"
+            
+            reasoning = f"AI model analysis: {prob_percent:.0f}% probability this is plain language ({prob_desc} confidence). " \
+                       f"Text is {readability_desc} (reading ease score: {fre_display}) and written at {grade_desc}."
+            
+            return {
+                "is_pls": bool(is_pls),
+                "confidence": round(float(pls_prob), 3),
+                "flesch_reading_ease": round(fre, 1),
+                "flesch_kincaid_grade": round(fkg, 1),
+                "avg_word_length": round(avg_word_length, 2),
+                "technical_terms_count": technical_count,
+                "reasoning": reasoning
+            }
+        except Exception as e:
+            # Si falla el modelo, continuar con heurísticas
+            print(f"Error using trained classifier: {e}, falling back to heuristics")
+    
+    # Fallback: usar heurísticas si el modelo no está disponible
     try:
         fre = textstat.flesch_reading_ease(texto)
         fkg = textstat.flesch_kincaid_grade(texto)
@@ -308,14 +453,12 @@ def clasificar_texto(texto: str) -> Dict:
         fre = 0.0
         fkg = 20.0
     
-    # Calcular longitud promedio de palabras
     words = texto.split()
     if len(words) > 0:
         avg_word_length = sum(len(word) for word in words) / len(words)
     else:
         avg_word_length = 0
     
-    # Detectar términos técnicos complejos (indicadores de texto técnico)
     technical_indicators = [
         'randomized', 'controlled', 'trial', 'statistically', 'significant',
         'methodology', 'intervention', 'efficacy', 'placebo', 'cohort',
@@ -328,60 +471,63 @@ def clasificar_texto(texto: str) -> Dict:
     technical_ratio = technical_count / max(len(words), 1) * 100
     
     # Heurísticas para determinar si es PLS
-    # PLS típicamente tiene:
-    # - FRE > 60 (fácil de leer)
-    # - FKG < 9 (nivel educativo bajo)
-    # - Palabras más cortas en promedio
-    # - Menos términos técnicos
-    
     pls_score = 0.0
     reasoning_parts = []
     
-    # Flesch Reading Ease (0-100, más alto = más fácil)
+    # Build user-friendly reasoning
+    reasoning_parts = []
+    
     if fre >= 60:
         pls_score += 0.3
-        reasoning_parts.append(f"High readability (FRE: {fre:.1f})")
+        reasoning_parts.append(f"Easy to read (score: {fre:.0f})")
     elif fre >= 50:
         pls_score += 0.15
-        reasoning_parts.append(f"Moderate readability (FRE: {fre:.1f})")
+        reasoning_parts.append(f"Moderately readable (score: {fre:.0f})")
+    elif fre >= 30:
+        reasoning_parts.append(f"Difficult to read (score: {fre:.0f})")
+    elif fre >= 0:
+        reasoning_parts.append(f"Very difficult to read (score: {fre:.0f})")
     else:
-        reasoning_parts.append(f"Low readability (FRE: {fre:.1f})")
+        reasoning_parts.append(f"Extremely difficult to read (score: {fre:.0f}, negative scores indicate very complex text)")
     
-    # Flesch-Kincaid Grade (más bajo = más fácil)
     if fkg <= 8:
         pls_score += 0.3
-        reasoning_parts.append(f"Low grade level (FKG: {fkg:.1f})")
+        reasoning_parts.append(f"Written at grade {fkg:.0f} level (easy to understand)")
     elif fkg <= 12:
         pls_score += 0.15
-        reasoning_parts.append(f"Moderate grade level (FKG: {fkg:.1f})")
+        reasoning_parts.append(f"Written at grade {fkg:.0f} level (moderate difficulty)")
     else:
-        reasoning_parts.append(f"High grade level (FKG: {fkg:.1f})")
+        reasoning_parts.append(f"Written at grade {fkg:.0f} level (difficult to understand)")
     
-    # Longitud promedio de palabras (más cortas = más simple)
     if avg_word_length <= 4.5:
         pls_score += 0.2
-        reasoning_parts.append(f"Short average word length ({avg_word_length:.1f} chars)")
+        reasoning_parts.append(f"Uses short, simple words (avg {avg_word_length:.1f} characters)")
     elif avg_word_length <= 5.5:
         pls_score += 0.1
-        reasoning_parts.append(f"Moderate word length ({avg_word_length:.1f} chars)")
+        reasoning_parts.append(f"Uses moderately sized words (avg {avg_word_length:.1f} characters)")
     else:
-        reasoning_parts.append(f"Long average word length ({avg_word_length:.1f} chars)")
+        reasoning_parts.append(f"Uses long, complex words (avg {avg_word_length:.1f} characters)")
     
-    # Términos técnicos (menos = más simple)
     if technical_ratio < 2:
         pls_score += 0.2
-        reasoning_parts.append(f"Few technical terms ({technical_count} found)")
+        if technical_count == 0:
+            reasoning_parts.append(f"No technical terms found")
+        else:
+            reasoning_parts.append(f"Very few technical terms ({technical_count} found)")
     elif technical_ratio < 5:
         pls_score += 0.1
-        reasoning_parts.append(f"Some technical terms ({technical_count} found)")
+        reasoning_parts.append(f"Some technical terms present ({technical_count} found)")
     else:
-        reasoning_parts.append(f"Many technical terms ({technical_count} found)")
+        reasoning_parts.append(f"Many technical terms present ({technical_count} found)")
     
-    # Normalizar score a 0-1
     confidence = min(pls_score, 1.0)
     is_pls = confidence >= 0.5
     
-    reasoning = "; ".join(reasoning_parts)
+    # Create natural language reasoning
+    if len(reasoning_parts) > 0:
+        reasoning = "Analysis based on text characteristics: " + ". ".join(reasoning_parts) + "."
+    else:
+        reasoning = "Analysis based on text characteristics."
     
     return {
         "is_pls": is_pls,

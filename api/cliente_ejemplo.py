@@ -128,7 +128,7 @@ def ejemplo_basico():
     
     # Verificar que la API está funcionando
     health = client.health_check()
-    print(f"✅ API Status: {health['status']}")
+    print(f"API Status: {health['status']}")
     print(f"   Model loaded: {health['model_loaded']}")
     print(f"   Device: {health['device']}")
     print()
@@ -144,7 +144,7 @@ def ejemplo_basico():
     chronic kidney disease and hypertensive retinopathy.
     """
     
-    print("📝 Technical text:")
+    print("Technical text:")
     print(texto.strip()[:200] + "...")
     print()
     
@@ -152,11 +152,11 @@ def ejemplo_basico():
     print("🔄 Generating PLS...")
     resultado = client.generar_pls(texto)
     
-    print(f"\n✅ Generated PLS:")
+    print(f"\nGenerated PLS:")
     print(f"{resultado['generated_pls']}")
     print()
-    print(f"⏱️  Time: {resultado['generation_time']:.3f}s")
-    print(f"📊 Chunks: {resultado['num_chunks']}")
+    print(f"Time: {resultado['generation_time']:.3f}s")
+    print(f"Chunks: {resultado['num_chunks']}")
     print(f"🔢 Tokens input: {resultado['tokens_input']}")
     print(f"🔢 Tokens output: {resultado['tokens_output']}")
     print()
@@ -189,16 +189,16 @@ def ejemplo_con_metricas():
         reference_pls=pls_ref
     )
     
-    print(f"\n✅ Generated PLS:")
+    print(f"\nGenerated PLS:")
     print(f"{resultado['generated_pls']}")
     print()
     
-    print("📊 METRICS:")
+    print("METRICS:")
     print("-" * 80)
     metricas = resultado['metrics']
     
     # Similarity metrics
-    print("\n🔍 Similarity/Overlap:")
+    print("\nSimilarity/Overlap:")
     if metricas.get('rouge1'):
         print(f"  ROUGE-1:     {metricas['rouge1']:.3f}")
         print(f"  ROUGE-2:     {metricas['rouge2']:.3f}")
@@ -209,33 +209,33 @@ def ejemplo_con_metricas():
             print(f"  BERTScore:   {metricas['bertscore_f1']:.3f}")
     
     # Simplification
-    print("\n📝 Simplification:")
+    print("\nSimplification:")
     if metricas.get('sari'):
         print(f"  SARI ⭐:     {metricas['sari']:.3f}  ", end="")
         if metricas['sari'] >= 0.40:
-            print("(✅ Good)")
+            print("([OK] Good)")
         else:
-            print("(⚠️  Needs improvement)")
+            print("([ADV] Needs improvement)")
     
     # Readability
-    print("\n📖 Readability:")
+    print("\nReadability:")
     print(f"  Flesch RE:   {metricas['flesch_reading_ease']:.1f}  ", end="")
     if 60 <= metricas['flesch_reading_ease'] <= 70:
-        print("(✅ 8th grade level)")
+        print("([OK] 8th grade level)")
     else:
         print(f"(Target: ~64)")
     
     print(f"  Flesch KG:   {metricas['flesch_kincaid_grade']:.1f}  ", end="")
     if 6 <= metricas['flesch_kincaid_grade'] <= 9:
-        print("(✅ 8th grade level)")
+        print("([OK] 8th grade level)")
     else:
         print(f"(Target: ~7.4)")
     
     # Compression
-    print("\n📉 Compression:")
+    print("\nCompression:")
     print(f"  Ratio:       {metricas['compression_ratio']:.2f}  ", end="")
     if 0.30 <= metricas['compression_ratio'] <= 0.40:
-        print("(✅ Optimal)")
+        print("([OK] Optimal)")
     else:
         print(f"(Target: 0.33-0.37)")
     
@@ -243,7 +243,7 @@ def ejemplo_con_metricas():
     print(f"  Original:    {metricas['original_word_length']} words")
     
     print()
-    print(f"⏱️  Total time: {resultado['generation_time']:.3f}s")
+    print(f"Total time: {resultado['generation_time']:.3f}s")
     print()
 
 def ejemplo_batch():
@@ -260,7 +260,7 @@ def ejemplo_batch():
         "Bronchial asthma is a chronic inflammatory disease of the airways."
     ]
     
-    print(f"📋 Processing {len(textos)} texts...\n")
+    print(f"Processing {len(textos)} texts...\n")
     
     for i, texto in enumerate(textos, 1):
         print(f"Text {i}:")
@@ -287,14 +287,14 @@ if __name__ == "__main__":
         
         ejemplo_batch()
         
-        print("✅ All examples completed successfully")
+        print("All examples completed successfully")
         
     except requests.exceptions.ConnectionError:
-        print("❌ Error: Could not connect to the API")
+        print("ERROR: Could not connect to the API")
         print("   Make sure the API is running at http://localhost:8000")
         print("   Run: python main.py")
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"ERROR: {e}")
         import traceback
         traceback.print_exc()
 

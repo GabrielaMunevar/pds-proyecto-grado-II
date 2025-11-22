@@ -6,6 +6,7 @@ const API_BASE_URL = window.location.origin; // Auto-detect API URL
 const API_ENDPOINTS = {
     classify: `${API_BASE_URL}/classify`,
     generate: `${API_BASE_URL}/generate`,
+    generateWithMetrics: `${API_BASE_URL}/generate-with-metrics`,
     health: `${API_BASE_URL}/health`
 };
 
@@ -83,7 +84,7 @@ function initializeClassify() {
         const text = textarea.value.trim();
         
         if (text.length < 10) {
-            showToast('Please enter at least 10 characters', 'error');
+            showToast('Please enter at least 10 characters to analyze', 'error');
             return;
         }
 
@@ -111,7 +112,7 @@ async function classifyText(text) {
 
         const result = await response.json();
         displayClassificationResult(result);
-        showToast('Text classified successfully!', 'success');
+        showToast('Text analysis complete!', 'success');
 
     } catch (error) {
         console.error('Classification error:', error);
@@ -185,7 +186,7 @@ function initializeGenerate() {
         const text = textarea.value.trim();
         
         if (text.length < 10) {
-            showToast('Please enter at least 10 characters', 'error');
+            showToast('Please enter at least 10 characters to generate a summary', 'error');
             return;
         }
 
@@ -208,7 +209,8 @@ async function generatePLS(text, maxLength = 256, numBeams = 4) {
     hideResult('generate-result');
 
     try {
-        const response = await fetch(API_ENDPOINTS.generate, {
+        // Usar endpoint con métricas para mostrar información completa
+        const response = await fetch(API_ENDPOINTS.generateWithMetrics, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -249,14 +251,127 @@ function displayGenerationResult(result) {
     plsText.textContent = result.generated_pls || 'No output generated';
 
     // Update metadata
-    generationTime.textContent = `${result.generation_time}s`;
+    generationTime.textContent = `${result.generation_time.toFixed(2)}s`;
     numChunks.textContent = result.num_chunks || 1;
     inputTokens.textContent = result.tokens_input || '-';
     outputTokens.textContent = result.tokens_output || '-';
 
+    // Display metrics if available
+    if (result.metrics) {
+        displayMetrics(result.metrics);
+    }
+
     // Show result
     resultContainer.classList.remove('hidden');
     resultContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function displayMetrics(metrics) {
+    // Basic metrics
+    const freValue = document.getElementById('metric-fre');
+    const fkgValue = document.getElementById('metric-fkg');
+    const compressionValue = document.getElementById('metric-compression');
+    const wordLengthValue = document.getElementById('metric-word-length');
+    const originalWordLengthValue = document.getElementById('metric-original-length');
+
+    if (freValue && metrics.flesch_reading_ease !== undefined) {
+        freValue.textContent = metrics.flesch_reading_ease.toFixed(1);
+        // Add color coding based on readability
+        const fre = metrics.flesch_reading_ease;
+        freValue.className = 'metric-value';
+        if (fre >= 60) {
+            freValue.classList.add('metric-good');
+        } else if (fre >= 30) {
+            freValue.classList.add('metric-medium');
+        } else {
+            freValue.classList.add('metric-poor');
+        }
+    }
+
+    if (fkgValue && metrics.flesch_kincaid_grade !== undefined) {
+        fkgValue.textContent = metrics.flesch_kincaid_grade.toFixed(1);
+    }
+
+    if (compressionValue && metrics.compression_ratio !== undefined) {
+        const ratio = metrics.compression_ratio;
+        const ratioPercent = (ratio * 100).toFixed(1);
+        compressionValue.textContent = ratioPercent + '%';
+        
+        // Update description based on ratio
+        const descriptionEl = document.getElementById('compression-description');
+        if (descriptionEl) {
+            if (ratio < 0.5) {
+                descriptionEl.textContent = `Summary is ${ratioPercent}% of original (highly compressed)`;
+            } else if (ratio < 0.8) {
+                descriptionEl.textContent = `Summary is ${ratioPercent}% of original (compressed)`;
+            } else if (ratio <= 1.0) {
+                descriptionEl.textContent = `Summary is ${ratioPercent}% of original (slightly compressed)`;
+            } else if (ratio <= 1.5) {
+                descriptionEl.textContent = `Summary is ${ratioPercent}% of original (expanded)`;
+            } else {
+                descriptionEl.textContent = `Summary is ${ratioPercent}% of original (highly expanded)`;
+            }
+        }
+    }
+
+    if (wordLengthValue && metrics.word_length !== undefined) {
+        wordLengthValue.textContent = metrics.word_length;
+    }
+
+    if (originalWordLengthValue && metrics.original_word_length !== undefined) {
+        originalWordLengthValue.textContent = metrics.original_word_length;
+    }
+
+    // Similarity metrics (if reference provided)
+    if (metrics.rouge1 !== undefined || metrics.rouge1 !== null) {
+        const rouge1Value = document.getElementById('metric-rouge1');
+        const rouge2Value = document.getElementById('metric-rouge2');
+        const rougeLValue = document.getElementById('metric-rougeL');
+        const bleuValue = document.getElementById('metric-bleu');
+        const meteorValue = document.getElementById('metric-meteor');
+        const sariValue = document.getElementById('metric-sari');
+
+        if (rouge1Value && metrics.rouge1 !== null) {
+            rouge1Value.textContent = metrics.rouge1.toFixed(3);
+            document.getElementById('similarity-metrics').classList.remove('hidden');
+        }
+
+        if (rouge2Value && metrics.rouge2 !== null) {
+            rouge2Value.textContent = metrics.rouge2.toFixed(3);
+        }
+
+        if (rougeLValue && metrics.rougeL !== null) {
+            rougeLValue.textContent = metrics.rougeL.toFixed(3);
+        }
+
+        if (bleuValue && metrics.bleu !== null) {
+            bleuValue.textContent = metrics.bleu.toFixed(3);
+        }
+
+        if (meteorValue && metrics.meteor !== null) {
+            meteorValue.textContent = metrics.meteor.toFixed(3);
+        }
+
+        if (sariValue && metrics.sari !== null) {
+            sariValue.textContent = metrics.sari.toFixed(3);
+            // Color code SARI
+            const sari = metrics.sari;
+            sariValue.className = 'metric-value';
+            if (sari >= 0.40) {
+                sariValue.classList.add('metric-good');
+            } else if (sari >= 0.30) {
+                sariValue.classList.add('metric-medium');
+            } else {
+                sariValue.classList.add('metric-poor');
+            }
+        }
+    }
+
+    // Show metrics section
+    const metricsSection = document.getElementById('metrics-section');
+    if (metricsSection) {
+        metricsSection.classList.remove('hidden');
+    }
 }
 
 // ============================================================================

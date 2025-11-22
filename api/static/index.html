@@ -15,7 +15,7 @@
         <header class="header">
             <div class="header-content">
                 <div class="university-info">
-                    <p class="university-text">Maestría de Inteligencia Artificial</p>
+                    <p class="university-text">Master's in Artificial Intelligence</p>
                     <p class="university-text">Universidad de los Andes</p>
                 </div>
                 <h1 class="logo">
@@ -40,16 +40,16 @@
             <!-- Classify Tab -->
             <div id="classify-tab" class="tab-content active">
                 <div class="card">
-                    <h2 class="card-title">Classify Text as PLS or Technical</h2>
-                    <p class="card-description">Paste your text below to determine if it's already a Plain Language Summary or if it needs simplification.</p>
+                    <h2 class="card-title">Classify Text</h2>
+                    <p class="card-description">Check if your text is already written in plain language (easy to understand) or if it's technical and needs simplification.</p>
                     
                     <div class="form-group">
-                        <label for="classify-text">Text to Classify</label>
+                        <label for="classify-text">Text to Analyze</label>
                         <textarea 
                             id="classify-text" 
                             class="textarea" 
                             rows="8" 
-                            placeholder="Enter text here... (minimum 10 characters)"
+                            placeholder="Paste or type your text here to check if it's written in plain language... (minimum 10 characters)"
                         ></textarea>
                         <div class="char-count">
                             <span id="classify-char-count">0</span> characters
@@ -70,31 +70,35 @@
                                 <span class="badge-text"></span>
                             </div>
                             <div class="confidence-bar">
-                                <div class="confidence-label">Confidence: <span id="confidence-value">0%</span></div>
+                                <div class="confidence-label">Probability of being PLS: <span id="confidence-value">0%</span></div>
                                 <div class="progress-bar">
                                     <div class="progress-fill" id="confidence-progress"></div>
                                 </div>
                             </div>
                             <div class="metrics-grid">
                                 <div class="metric-item">
-                                    <span class="metric-label">Flesch Reading Ease</span>
+                                    <span class="metric-label">Reading Ease Score</span>
                                     <span class="metric-value" id="fre-value">-</span>
+                                    <span class="metric-hint">Higher = easier to read (typically 0-100, can be negative for very difficult text)</span>
                                 </div>
                                 <div class="metric-item">
-                                    <span class="metric-label">Grade Level</span>
+                                    <span class="metric-label">Reading Grade Level</span>
                                     <span class="metric-value" id="fkg-value">-</span>
+                                    <span class="metric-hint">Lower = easier to understand</span>
                                 </div>
                                 <div class="metric-item">
-                                    <span class="metric-label">Avg Word Length</span>
+                                    <span class="metric-label">Average Word Length</span>
                                     <span class="metric-value" id="awl-value">-</span>
+                                    <span class="metric-hint">Characters per word</span>
                                 </div>
                                 <div class="metric-item">
-                                    <span class="metric-label">Technical Terms</span>
+                                    <span class="metric-label">Technical Terms Found</span>
                                     <span class="metric-value" id="tech-value">-</span>
+                                    <span class="metric-hint">Count of scientific/medical terms</span>
                                 </div>
                             </div>
                             <div class="reasoning-box">
-                                <strong>Reasoning:</strong>
+                                <strong>How we determined this:</strong>
                                 <p id="reasoning-text"></p>
                             </div>
                         </div>
@@ -106,15 +110,15 @@
             <div id="generate-tab" class="tab-content">
                 <div class="card">
                     <h2 class="card-title">Generate Plain Language Summary</h2>
-                    <p class="card-description">Convert technical medical text into an easy-to-understand Plain Language Summary.</p>
+                    <p class="card-description">Transform complex medical or scientific text into simple, easy-to-understand language that anyone can read.</p>
                     
                     <div class="form-group">
-                        <label for="generate-text">Technical Medical Text</label>
+                        <label for="generate-text">Technical or Medical Text</label>
                         <textarea 
                             id="generate-text" 
                             class="textarea" 
                             rows="8" 
-                            placeholder="Enter technical medical text here... (minimum 10 characters)"
+                            placeholder="Paste your complex medical or scientific text here... (minimum 10 characters)"
                         ></textarea>
                         <div class="char-count">
                             <span id="generate-char-count">0</span> characters
@@ -123,12 +127,14 @@
 
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="max-length">Max Length (tokens)</label>
+                            <label for="max-length">Maximum Summary Length</label>
                             <input type="number" id="max-length" class="input" value="256" min="50" max="512">
+                            <span class="input-hint">Longer summaries = more detail (50-512 tokens)</span>
                         </div>
                         <div class="form-group">
-                            <label for="num-beams">Beam Search</label>
+                            <label for="num-beams">Quality Setting</label>
                             <input type="number" id="num-beams" class="input" value="4" min="1" max="10">
+                            <span class="input-hint">Higher = better quality, slower (1-10)</span>
                         </div>
                     </div>
 
@@ -168,6 +174,90 @@
                                     <span class="stat-value" id="output-tokens">-</span>
                                 </div>
                             </div>
+
+                            <!-- Metrics Section -->
+                            <div id="metrics-section" class="metrics-section hidden">
+                                <div class="metrics-header">
+                                    <h4>Quality Metrics</h4>
+                                </div>
+                                
+                                <!-- Readability Metrics -->
+                                <div class="metrics-group">
+                                    <h5 class="metrics-group-title">Readability</h5>
+                                    <p class="metrics-group-description">How easy is the generated summary to read and understand?</p>
+                                    <div class="metrics-grid">
+                                        <div class="metric-item">
+                                            <span class="metric-label">Reading Ease Score</span>
+                                            <span class="metric-value" id="metric-fre">-</span>
+                                            <span class="metric-description">Typically 0-100 (can be negative): Higher = easier to read</span>
+                                        </div>
+                                        <div class="metric-item">
+                                            <span class="metric-label">Reading Grade Level</span>
+                                            <span class="metric-value" id="metric-fkg">-</span>
+                                            <span class="metric-description">Lower = easier to understand</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Compression Metrics -->
+                                <div class="metrics-group">
+                                    <h5 class="metrics-group-title">Length Comparison</h5>
+                                    <p class="metrics-group-description">How does the summary length compare to the original text?</p>
+                                    <div class="metrics-grid">
+                                        <div class="metric-item">
+                                            <span class="metric-label">Length Ratio</span>
+                                            <span class="metric-value" id="metric-compression">-</span>
+                                            <span class="metric-description" id="compression-description">-</span>
+                                        </div>
+                                        <div class="metric-item">
+                                            <span class="metric-label">Original Text Words</span>
+                                            <span class="metric-value" id="metric-original-length">-</span>
+                                        </div>
+                                        <div class="metric-item">
+                                            <span class="metric-label">Summary Words</span>
+                                            <span class="metric-value" id="metric-word-length">-</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Similarity Metrics (only shown if reference provided) -->
+                                <div id="similarity-metrics" class="metrics-group hidden">
+                                    <h5 class="metrics-group-title">Similarity to Reference</h5>
+                                    <p class="metrics-group-description">How similar is the generated summary to a reference summary? (0-1 scale, higher = more similar)</p>
+                                    <div class="metrics-grid">
+                                        <div class="metric-item">
+                                            <span class="metric-label">ROUGE-1</span>
+                                            <span class="metric-value" id="metric-rouge1">-</span>
+                                            <span class="metric-description">Word overlap</span>
+                                        </div>
+                                        <div class="metric-item">
+                                            <span class="metric-label">ROUGE-2</span>
+                                            <span class="metric-value" id="metric-rouge2">-</span>
+                                            <span class="metric-description">Phrase overlap</span>
+                                        </div>
+                                        <div class="metric-item">
+                                            <span class="metric-label">ROUGE-L</span>
+                                            <span class="metric-value" id="metric-rougeL">-</span>
+                                            <span class="metric-description">Sentence similarity</span>
+                                        </div>
+                                        <div class="metric-item">
+                                            <span class="metric-label">BLEU</span>
+                                            <span class="metric-value" id="metric-bleu">-</span>
+                                            <span class="metric-description">Translation quality</span>
+                                        </div>
+                                        <div class="metric-item">
+                                            <span class="metric-label">METEOR</span>
+                                            <span class="metric-value" id="metric-meteor">-</span>
+                                            <span class="metric-description">Semantic similarity</span>
+                                        </div>
+                                        <div class="metric-item">
+                                            <span class="metric-label">SARI</span>
+                                            <span class="metric-value" id="metric-sari">-</span>
+                                            <span class="metric-description">Simplification quality</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -177,7 +267,7 @@
         <!-- Footer -->
         <footer class="footer">
             <p>Medical PLS Tool v1.0.0 | Powered by T5-base</p>
-            <p class="footer-university">Maestría de Inteligencia Artificial - Universidad de los Andes</p>
+            <p class="footer-university">Master's in Artificial Intelligence - Universidad de los Andes</p>
         </footer>
     </div>
 

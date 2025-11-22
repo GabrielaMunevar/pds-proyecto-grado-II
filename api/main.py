@@ -25,8 +25,20 @@ from utils import (
     clasificar_texto
 )
 
-# Configurar logging
-logging.basicConfig(level=logging.INFO)
+# Importar configuración
+try:
+    from config import settings, load_env_file
+    # Cargar .env si existe
+    load_env_file()
+    # Configurar logging desde configuración
+    log_level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
+    logging.basicConfig(level=log_level)
+except ImportError:
+    # Fallback si config.py no está disponible
+    import os
+    log_level = os.getenv("LOG_LEVEL", "INFO")
+    logging.basicConfig(level=getattr(logging, log_level.upper(), logging.INFO))
+
 logger = logging.getLogger(__name__)
 
 # Crear app FastAPI
@@ -149,6 +161,7 @@ class HealthResponse(BaseModel):
     """Health check response"""
     status: str
     model_loaded: bool
+    classifier_loaded: bool
     device: str
     model_path: str
 
@@ -168,17 +181,42 @@ MODEL_PATH = None
 
 @app.on_event("startup")
 async def load_model():
-    """Carga el modelo al iniciar la API"""
+    """Carga los modelos al iniciar la API"""
     global MODEL, TOKENIZER, TEXT_SPLITTER, DEVICE, MODEL_PATH
     
-    logger.info("🚀 Iniciando API de PLS...")
+    logger.info("Starting PLS API...")
+    
+    # Try to download models from DVC/S3 if configured
+    try:
+        from utils_dvc import download_models_from_dvc_s3
+        # Usar configuración centralizada si está disponible
+        try:
+            from config import settings
+            dvc_bucket = settings.DVC_S3_BUCKET
+            dvc_prefix = settings.DVC_S3_PREFIX
+        except ImportError:
+            # Fallback a os.getenv
+            dvc_bucket = os.getenv("DVC_S3_BUCKET")
+            dvc_prefix = os.getenv("DVC_S3_PREFIX", "dvcstore")
+        
+        if dvc_bucket:
+            logger.info(f"Attempting to download models from DVC S3 (bucket: {dvc_bucket}/{dvc_prefix})...")
+            download_models_from_dvc_s3(
+                bucket_name=dvc_bucket,
+                dvc_prefix=dvc_prefix
+            )
+    except ImportError:
+        logger.debug("utils_dvc not available, using local models")
+    except Exception as e:
+        logger.warning(f"Could not download models from DVC S3: {e}. Using local models.")
     
     # Configurar device
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-    logger.info(f"📱 Device: {DEVICE}")
+    logger.info(f"Device: {DEVICE}")
     
-    # Ruta al modelo (ajusta según tu estructura)
-    # Intenta múltiples rutas posibles
+    # ========================================================================
+    # Cargar modelo T5 (Generador)
+    # ========================================================================
     possible_paths = [
         "../models/t5_base",  # Desde api/
         "./models/t5_base",   # Desde api/ si está en la misma carpeta
@@ -194,27 +232,40 @@ async def load_model():
     
     if MODEL_PATH is None:
         raise FileNotFoundError(
-            f"No se encontró el modelo en ninguna de estas rutas: {possible_paths}\n"
-            "Por favor, asegúrate de que el modelo esté en models/t5_base/"
+            f"T5 model not found in any of these paths: {possible_paths}\n"
+            "Please ensure the model is in models/t5_base/"
         )
     
     try:
-        logger.info(f"📥 Cargando modelo desde: {MODEL_PATH}")
+        logger.info(f"Loading T5 model from: {MODEL_PATH}")
         TOKENIZER = AutoTokenizer.from_pretrained(MODEL_PATH)
         MODEL = AutoModelForSeq2SeqLM.from_pretrained(MODEL_PATH)
         MODEL.to(DEVICE)
-        MODEL.eval()  # Modo evaluación
+        MODEL.eval()  # Evaluation mode
         
-        logger.info(f"✅ Modelo cargado exitosamente")
-        logger.info(f"   Parámetros: {sum(p.numel() for p in MODEL.parameters()):,}")
+        logger.info(f"T5 model loaded successfully")
+        logger.info(f"   Parameters: {sum(p.numel() for p in MODEL.parameters()):,}")
         
-        # Configurar text splitter para chunking
+        # Configure text splitter for chunking
         TEXT_SPLITTER = setup_chunking(TOKENIZER)
-        logger.info("✅ Text splitter configurado")
+        logger.info("Text splitter configured")
         
     except Exception as e:
-        logger.error(f"❌ Error al cargar modelo: {e}")
-        raise RuntimeError(f"No se pudo cargar el modelo: {e}")
+        logger.error(f"Error loading T5 model: {e}")
+        raise RuntimeError(f"Could not load T5 model: {e}")
+    
+    # ========================================================================
+    # Load Classifier Model (optional, not critical)
+    # ========================================================================
+    try:
+        from utils import load_classifier
+        clf, vectorizer = load_classifier()
+        if clf is not None and vectorizer is not None:
+            logger.info("Classifier model loaded successfully")
+        else:
+            logger.warning("Classifier model not available, using heuristics for /classify")
+    except Exception as e:
+        logger.warning(f"Could not load classifier: {e}. Will use heuristics for /classify")
 
 # ============================================================================
 # ENDPOINTS
@@ -249,12 +300,15 @@ async def api_info():
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
-    """Health check - verifies that the model is loaded"""
+    """Health check - verifies that the models are loaded"""
+    from utils import CLASSIFIER, VECTORIZER
+    
     return HealthResponse(
         status="ok" if MODEL is not None else "error",
         model_loaded=MODEL is not None,
+        classifier_loaded=CLASSIFIER is not None and VECTORIZER is not None,
         device=DEVICE,
-        model_path=MODEL_PATH
+        model_path=MODEL_PATH or "N/A"
     )
 
 @app.post("/generate", response_model=GenerateResponse)
@@ -289,7 +343,7 @@ async def generate_pls(request: GenerateRequest):
         tokens_input = len(TOKENIZER.encode(request.technical_text, add_special_tokens=False))
         tokens_output = len(TOKENIZER.encode(generated_pls, add_special_tokens=False))
         
-        logger.info(f"✅ PLS generated in {generation_time:.2f}s ({num_chunks} chunks)")
+        logger.info(f"PLS generated in {generation_time:.2f}s ({num_chunks} chunks)")
         
         return GenerateResponse(
             generated_pls=generated_pls,
@@ -300,7 +354,7 @@ async def generate_pls(request: GenerateRequest):
         )
         
     except Exception as e:
-        logger.error(f"❌ Error in generation: {e}")
+        logger.error(f"Error in generation: {e}")
         raise HTTPException(status_code=500, detail=f"Error generating PLS: {str(e)}")
 
 @app.post("/evaluate", response_model=MetricsResponse)
@@ -328,12 +382,12 @@ async def evaluate_pls(request: EvaluateRequest):
                 prediction=request.generated_pls
             )
         
-        logger.info(f"✅ Metrics calculated")
+        logger.info(f"Metrics calculated")
         
         return MetricsResponse(**metrics)
         
     except Exception as e:
-        logger.error(f"❌ Error in evaluation: {e}")
+        logger.error(f"Error in evaluation: {e}")
         raise HTTPException(status_code=500, detail=f"Error calculating metrics: {str(e)}")
 
 @app.post("/classify", response_model=ClassifyResponse)
@@ -347,10 +401,10 @@ async def classify_text(request: ClassifyRequest):
     """
     try:
         result = clasificar_texto(request.text)
-        logger.info(f"✅ Text classified: is_pls={result['is_pls']}, confidence={result['confidence']:.3f}")
+        logger.info(f"Text classified: is_pls={result['is_pls']}, confidence={result['confidence']:.3f}")
         return ClassifyResponse(**result)
     except Exception as e:
-        logger.error(f"❌ Error in classification: {e}")
+        logger.error(f"Error in classification: {e}")
         raise HTTPException(status_code=500, detail=f"Error classifying text: {str(e)}")
 
 @app.post("/generate-with-metrics", response_model=GenerateWithMetricsResponse)
@@ -395,17 +449,28 @@ async def generate_with_metrics(request: GenerateWithMetricsRequest):
                 prediction=generated_pls
             )
         
-        logger.info(f"✅ PLS + metrics in {generation_time:.2f}s")
+        logger.info(f"PLS + metrics in {generation_time:.2f}s")
         
-        return GenerateWithMetricsResponse(
+        # Calculate token counts
+        tokens_input = len(TOKENIZER.encode(request.technical_text))
+        tokens_output = len(TOKENIZER.encode(generated_pls))
+        
+        response = GenerateWithMetricsResponse(
             generated_pls=generated_pls,
             metrics=MetricsResponse(**metrics),
             generation_time=round(generation_time, 3),
             num_chunks=num_chunks
         )
         
+        # Add token counts to response (for frontend compatibility)
+        response_dict = response.dict()
+        response_dict['tokens_input'] = tokens_input
+        response_dict['tokens_output'] = tokens_output
+        
+        return response_dict
+        
     except Exception as e:
-        logger.error(f"❌ Error: {e}")
+        logger.error(f"Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================================

@@ -6,7 +6,7 @@
 
 set -e  # Exit on error
 
-echo "🚀 Medical PLS API - Deployment Script"
+echo "Medical PLS API - Deployment Script"
 echo "========================================"
 
 # Configuration
@@ -23,21 +23,21 @@ NC='\033[0m' # No Color
 
 # Check if running as root
 if [ "$EUID" -eq 0 ]; then 
-    echo -e "${RED}❌ Please do not run as root. Use a user with sudo privileges.${NC}"
+    echo -e "${RED}ERROR: Please do not run as root. Use a user with sudo privileges.${NC}"
     exit 1
 fi
 
 # Step 1: Update system
-echo -e "\n${YELLOW}📦 Step 1: Updating system...${NC}"
+echo -e "\n${YELLOW}Step 1: Updating system...${NC}"
 sudo apt update
 sudo apt upgrade -y
 
 # Step 2: Install dependencies
-echo -e "\n${YELLOW}📦 Step 2: Installing system dependencies...${NC}"
+echo -e "\n${YELLOW}Step 2: Installing system dependencies...${NC}"
 sudo apt install -y python3.9 python3.9-venv python3-pip build-essential git curl nginx
 
 # Step 3: Create application directory
-echo -e "\n${YELLOW}📁 Step 3: Setting up application directory...${NC}"
+echo -e "\n${YELLOW}Step 3: Setting up application directory...${NC}"
 sudo mkdir -p $APP_DIR
 sudo chown $USER:$USER $APP_DIR
 
@@ -55,7 +55,7 @@ fi
 cd $API_DIR
 
 # Step 5: Create virtual environment
-echo -e "\n${YELLOW}🐍 Step 5: Setting up Python virtual environment...${NC}"
+echo -e "\n${YELLOW}Step 5: Setting up Python virtual environment...${NC}"
 if [ ! -d "$VENV_DIR" ]; then
     python3.9 -m venv venv
 fi
@@ -63,14 +63,14 @@ fi
 source venv/bin/activate
 
 # Step 6: Install Python dependencies
-echo -e "\n${YELLOW}📦 Step 6: Installing Python dependencies...${NC}"
+echo -e "\n${YELLOW}Step 6: Installing Python dependencies...${NC}"
 pip install --upgrade pip
 pip install -r requirements.txt
 
 # Step 7: Check model
-echo -e "\n${YELLOW}🤖 Step 7: Checking model...${NC}"
+echo -e "\n${YELLOW}Step 7: Checking model...${NC}"
 if [ ! -d "$API_DIR/models/t5_base" ]; then
-    echo -e "${RED}⚠️  Model not found at $API_DIR/models/t5_base${NC}"
+    echo -e "${RED}ADVERTENCIA: Model not found at $API_DIR/models/t5_base${NC}"
     echo "Please ensure the model is in the correct location."
     echo "You can:"
     echo "  1. Upload via SCP: scp -r models/t5_base user@server:$API_DIR/models/"
@@ -79,7 +79,7 @@ if [ ! -d "$API_DIR/models/t5_base" ]; then
 fi
 
 # Step 8: Create systemd service
-echo -e "\n${YELLOW}⚙️  Step 8: Creating systemd service...${NC}"
+echo -e "\n${YELLOW}Step 8: Creating systemd service...${NC}"
 sudo tee /etc/systemd/system/$SERVICE_NAME.service > /dev/null <<EOF
 [Unit]
 Description=Medical PLS API
@@ -99,7 +99,7 @@ WantedBy=multi-user.target
 EOF
 
 # Step 9: Enable and start service
-echo -e "\n${YELLOW}🚀 Step 9: Starting service...${NC}"
+echo -e "\n${YELLOW}Step 9: Starting service...${NC}"
 sudo systemctl daemon-reload
 sudo systemctl enable $SERVICE_NAME
 sudo systemctl restart $SERVICE_NAME
@@ -109,14 +109,14 @@ sleep 3
 
 # Check service status
 if sudo systemctl is-active --quiet $SERVICE_NAME; then
-    echo -e "${GREEN}✅ Service is running${NC}"
+    echo -e "${GREEN}Service is running${NC}"
 else
-    echo -e "${RED}❌ Service failed to start. Check logs: sudo journalctl -u $SERVICE_NAME${NC}"
+    echo -e "${RED}ERROR: Service failed to start. Check logs: sudo journalctl -u $SERVICE_NAME${NC}"
     exit 1
 fi
 
 # Step 10: Configure Nginx
-echo -e "\n${YELLOW}🌐 Step 10: Configuring Nginx...${NC}"
+echo -e "\n${YELLOW}Step 10: Configuring Nginx...${NC}"
 read -p "Enter your domain or IP address (or press Enter to use IP): " DOMAIN
 DOMAIN=${DOMAIN:-$(curl -s ifconfig.me)}
 
@@ -159,18 +159,18 @@ sudo nginx -t
 sudo systemctl restart nginx
 
 # Step 11: Test deployment
-echo -e "\n${YELLOW}🧪 Step 11: Testing deployment...${NC}"
+echo -e "\n${YELLOW}Step 11: Testing deployment...${NC}"
 sleep 2
 
 if curl -f http://localhost:8000/health > /dev/null 2>&1; then
-    echo -e "${GREEN}✅ API is responding${NC}"
+    echo -e "${GREEN}API is responding${NC}"
 else
-    echo -e "${RED}❌ API is not responding. Check logs: sudo journalctl -u $SERVICE_NAME${NC}"
+    echo -e "${RED}ERROR: API is not responding. Check logs: sudo journalctl -u $SERVICE_NAME${NC}"
 fi
 
 # Final instructions
 echo -e "\n${GREEN}========================================${NC}"
-echo -e "${GREEN}✅ Deployment Complete!${NC}"
+echo -e "${GREEN}Deployment Complete!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 echo "Your API is available at:"

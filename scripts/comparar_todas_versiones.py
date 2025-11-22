@@ -13,7 +13,7 @@ def cargar_version(version):
     """Carga un archivo de versión específica"""
     archivo = Path(f'../data/synthetic_pls/pls_prueba_50_{version}.csv')
     if not archivo.exists():
-        print(f"⚠️  No se encontró: {archivo}")
+        print(f"ADVERTENCIA: No se encontró: {archivo}")
         return None
     return pd.read_csv(archivo)
 
@@ -36,7 +36,7 @@ def main():
         versiones.append(('V3 (Inglés)', df_v3))
     
     if len(versiones) == 0:
-        print("\n❌ No se encontraron archivos de versiones")
+        print("\nERROR: No se encontraron archivos de versiones")
         print("\nAsegúrate de tener:")
         print("  - data/synthetic_pls/pls_prueba_50_v1.csv")
         print("  - data/synthetic_pls/pls_prueba_50_v2.csv")
@@ -56,7 +56,7 @@ def main():
     print(f"{'Flesch Reading Ease':<30} ", end='')
     for _, df in versiones:
         valor = df['flesch_reading_ease'].mean()
-        simbolo = "✅" if 55 <= valor <= 75 else "❌"
+        simbolo = "[OK]" if 55 <= valor <= 75 else "[X]"
         print(f"{valor:>6.1f} {simbolo:<12}", end='')
     print(f"\n{'  Target: 60-70':<30}")
     
@@ -64,7 +64,7 @@ def main():
     print(f"\n{'Flesch-Kincaid Grade':<30} ", end='')
     for _, df in versiones:
         valor = df['flesch_kincaid_grade'].mean()
-        simbolo = "✅" if valor <= 10 else "❌"
+        simbolo = "[OK]" if valor <= 10 else "[X]"
         print(f"{valor:>6.1f} {simbolo:<12}", end='')
     print(f"\n{'  Target: 7-9':<30}")
     
@@ -80,7 +80,7 @@ def main():
     for _, df in versiones:
         en_rango = len(df[(df['longitud_pls'] >= 150) & (df['longitud_pls'] <= 250)])
         porcentaje = (en_rango / len(df)) * 100
-        simbolo = "✅" if porcentaje >= 80 else "❌"
+        simbolo = "[OK]" if porcentaje >= 80 else "[X]"
         print(f"{porcentaje:>6.0f}% {simbolo:<11}", end='')
     print(f"\n{'  Target: >80%':<30}")
     
@@ -118,15 +118,15 @@ def main():
         print(f"\nDesde {nombre_inicial} hasta {nombre_final}:")
         print(f"\nFlesch Reading Ease:")
         if mejora_flesch > 0:
-            print(f"  ✅ Mejoró +{mejora_flesch:.1f} puntos ({flesch_inicial:.1f} → {flesch_final:.1f})")
+            print(f"  [OK] Mejoró +{mejora_flesch:.1f} puntos ({flesch_inicial:.1f} → {flesch_final:.1f})")
         else:
-            print(f"  ❌ Empeoró {mejora_flesch:.1f} puntos ({flesch_inicial:.1f} → {flesch_final:.1f})")
+            print(f"  [X] Empeoró {mejora_flesch:.1f} puntos ({flesch_inicial:.1f} → {flesch_final:.1f})")
         
         print(f"\nFlesch-Kincaid Grade:")
         if mejora_grade > 0:
-            print(f"  ✅ Mejoró -{mejora_grade:.1f} puntos ({grade_inicial:.1f} → {grade_final:.1f})")
+            print(f"  [OK] Mejoró -{mejora_grade:.1f} puntos ({grade_inicial:.1f} → {grade_final:.1f})")
         else:
-            print(f"  ❌ Empeoró +{abs(mejora_grade):.1f} puntos ({grade_inicial:.1f} → {grade_final:.1f})")
+            print(f"  [X] Empeoró +{abs(mejora_grade):.1f} puntos ({grade_inicial:.1f} → {grade_final:.1f})")
     
     # Determinar mejor versión
     print("\n" + "="*70)
@@ -164,7 +164,7 @@ def main():
             mejor_score = score
             mejor_version = nombre
     
-    print(f"\n🏆 GANADOR: {mejor_version} (Score: {mejor_score}/8)")
+    print(f"\nGANADOR: {mejor_version} (Score: {mejor_score}/8)")
     
     # Gráficos
     if len(versiones) >= 2:
@@ -217,7 +217,7 @@ def main():
         
         plt.tight_layout()
         plt.savefig('comparacion_versiones.png', dpi=300, bbox_inches='tight')
-        print(f"\n📊 Gráfico guardado: comparacion_versiones.png")
+        print(f"\nGráfico guardado: comparacion_versiones.png")
         plt.show()
     
     # Recomendación final
@@ -230,13 +230,13 @@ def main():
         grade_v3 = df_v3['flesch_kincaid_grade'].mean()
         
         if flesch_v3 >= 55 and grade_v3 <= 10:
-            print("\n🎉 V3 (Inglés) cumple los targets mínimos")
-            print("\n✅ PROCEDER A PRODUCCIÓN:")
+            print("\nV3 (Inglés) cumple los targets mínimos")
+            print("\nPROCEDER A PRODUCCIÓN:")
             print("   1. cd scripts")
             print("   2. python generar_pls_sinteticos.py")
             print("   3. Opción 2: Generar 10,000 PLS")
         else:
-            print("\n⚠️  V3 mejora pero no cumple todos los targets")
+            print("\nADVERTENCIA: V3 mejora pero no cumple todos los targets")
             print("\n🔧 AJUSTES RECOMENDADOS:")
             if flesch_v3 < 55:
                 print(f"   - Flesch RE muy bajo ({flesch_v3:.1f}). Necesita subir.")
@@ -245,7 +245,7 @@ def main():
                 print(f"   - Grade muy alto ({grade_v3:.1f}). Demasiado complejo.")
                 print("   - Considera modificar el prompt para oraciones aún más cortas")
     else:
-        print("\n⚠️  Ninguna versión cumple completamente los targets")
+        print("\nADVERTENCIA: Ninguna versión cumple completamente los targets")
         print("\n🔄 OPCIONES:")
         print("   1. Ajustar temperatura del modelo (0.5 en vez de 0.7)")
         print("   2. Usar GPT-4 en vez de GPT-4o-mini")

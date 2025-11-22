@@ -17,7 +17,7 @@ def validar_v3():
     archivo = Path('../data/synthetic_pls/pls_prueba_50.csv')
     
     if not archivo.exists():
-        print("\n❌ ERROR: No se encontró pls_prueba_50.csv")
+        print("\nERROR: No se encontró pls_prueba_50.csv")
         print(f"   Ruta buscada: {archivo}")
         print("\n   Primero genera 50 PLS:")
         print("   1. cd scripts")
@@ -47,18 +47,18 @@ def validar_v3():
     print(f"   Rango: {df['flesch_reading_ease'].min():.1f} - {df['flesch_reading_ease'].max():.1f}")
     
     if 60 <= flesch <= 70:
-        print(f"   ✅ PERFECTO - Dentro del target ideal (60-70)")
+        print(f"   [OK] PERFECTO - Dentro del target ideal (60-70)")
         flesch_ok = True
     elif 55 <= flesch < 60:
-        print(f"   ⚠️  ACEPTABLE - Cerca del target (55-60)")
+        print(f"   [ADV] ACEPTABLE - Cerca del target (55-60)")
         print(f"      Necesita subir {60 - flesch:.1f} puntos para ser ideal")
         flesch_ok = True
     elif 70 < flesch <= 75:
-        print(f"   ⚠️  ACEPTABLE - Ligeramente sobre target (70-75)")
+        print(f"   [ADV] ACEPTABLE - Ligeramente sobre target (70-75)")
         print(f"      Puede ser demasiado simple")
         flesch_ok = True
     else:
-        print(f"   ❌ FUERA DE RANGO")
+        print(f"   [X] FUERA DE RANGO")
         if flesch < 55:
             print(f"      Demasiado complejo. Necesita subir {55 - flesch:.1f} puntos")
         else:
@@ -71,14 +71,14 @@ def validar_v3():
     print(f"   Rango: {df['flesch_kincaid_grade'].min():.1f} - {df['flesch_kincaid_grade'].max():.1f}")
     
     if 7 <= grade <= 9:
-        print(f"   ✅ PERFECTO - Nivel 8vo grado ideal (7-9)")
+        print(f"   [OK] PERFECTO - Nivel 8vo grado ideal (7-9)")
         grade_ok = True
     elif grade <= 10:
-        print(f"   ⚠️  ACEPTABLE - Cerca del target (≤10)")
+        print(f"   [ADV] ACEPTABLE - Cerca del target (≤10)")
         print(f"      Necesita bajar {grade - 9:.1f} puntos para ser ideal")
         grade_ok = True
     else:
-        print(f"   ❌ MUY ALTO - Nivel universitario")
+        print(f"   [X] MUY ALTO - Nivel universitario")
         print(f"      Necesita bajar {grade - 10:.1f} puntos mínimo")
         grade_ok = False
     
@@ -89,13 +89,13 @@ def validar_v3():
     print(f"   En rango 150-250: {en_rango}/50 ({en_rango/50*100:.0f}%)")
     
     if en_rango >= 45:
-        print(f"   ✅ EXCELENTE - ≥90% en rango")
+        print(f"   [OK] EXCELENTE - ≥90% en rango")
         longitud_ok = True
     elif en_rango >= 40:
-        print(f"   ⚠️  BUENO - ≥80% en rango")
+        print(f"   [ADV] BUENO - ≥80% en rango")
         longitud_ok = True
     else:
-        print(f"   ❌ INSUFICIENTE - <80% en rango")
+        print(f"   [X] INSUFICIENTE - <80% en rango")
         print(f"      Objetivo: al menos 40/50 en rango")
         longitud_ok = False
     
@@ -110,9 +110,9 @@ def validar_v3():
     costo_10k = costo_promedio * 10000
     print(f"\n   Proyección 10,000 PLS: ${costo_10k:.2f}")
     if costo_10k <= 5:
-        print(f"   ✅ Costo razonable")
+        print(f"   [OK] Costo razonable")
     else:
-        print(f"   ⚠️  Costo alto - considerar optimizaciones")
+        print(f"   [ADV] Costo alto - considerar optimizaciones")
     
     # Ejemplos
     print(f"\n5. DISTRIBUCIÓN DE CALIDAD:")
@@ -141,7 +141,7 @@ def validar_v3():
     todos_ok = flesch_ok and grade_ok and longitud_ok
     
     if todos_ok and flesch >= 60 and grade <= 9:
-        print("\n🎉 EXCELENTE - LISTO PARA PRODUCCIÓN")
+        print("\nEXCELENTE - LISTO PARA PRODUCCIÓN")
         print("\nPróximos pasos:")
         print("  1. Revisar manualmente 10-15 ejemplos")
         print("  2. Ejecutar: python generar_pls_sinteticos.py")
@@ -151,7 +151,7 @@ def validar_v3():
         return True
         
     elif todos_ok:
-        print("\n⚠️  ACEPTABLE - PUEDE PROCEDER CON PRECAUCIÓN")
+        print("\nADVERTENCIA: ACEPTABLE - PUEDE PROCEDER CON PRECAUCIÓN")
         print("\nLas métricas están cerca de los targets pero no perfectas.")
         print("Recomendaciones:")
         print("  1. Revisar manualmente 15-20 ejemplos")
@@ -160,7 +160,7 @@ def validar_v3():
         return True
         
     else:
-        print("\n❌ NECESITA MEJORAS - NO PROCEDER A PRODUCCIÓN AÚN")
+        print("\nERROR: NECESITA MEJORAS - NO PROCEDER A PRODUCCIÓN AÚN")
         print("\nProblemas identificados:")
         if not flesch_ok:
             print(f"  - Flesch Reading Ease fuera de rango ({flesch:.1f})")
@@ -187,7 +187,7 @@ def mostrar_ejemplos(n=5):
     archivo = Path('../data/synthetic_pls/pls_prueba_50.csv')
     
     if not archivo.exists():
-        print("\n❌ No se encontró el archivo de resultados")
+        print("\nERROR: No se encontró el archivo de resultados")
         return
     
     df = pd.read_csv(archivo)
@@ -205,11 +205,11 @@ def mostrar_ejemplos(n=5):
         
         # Clasificación
         if 60 <= row['flesch_reading_ease'] <= 70 and 7 <= row['flesch_kincaid_grade'] <= 9:
-            calidad = "✅ EXCELENTE"
+            calidad = "[OK] EXCELENTE"
         elif 55 <= row['flesch_reading_ease'] <= 75 and row['flesch_kincaid_grade'] <= 10:
-            calidad = "⚠️  BUENO"
+            calidad = "[ADV] BUENO"
         else:
-            calidad = "❌ NECESITA MEJORA"
+            calidad = "[X] NECESITA MEJORA"
         
         print(f"\nCalidad: {calidad}")
 

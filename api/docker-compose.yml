@@ -2,31 +2,33 @@ version: '3.8'
 
 services:
   pls-api:
-    build: .
-    container_name: pls-api
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pls-api-dev
     ports:
       - "8000:8000"
     volumes:
-      # Montar el modelo entrenado desde tu máquina local
+      # Montar modelos desde el host (solo lectura)
       - ../models/t5_base:/app/models/t5_base:ro
+      - ../models/baseline_classifier:/app/models/baseline_classifier:ro
+      # Montar código para desarrollo (hot reload)
+      - ./main.py:/app/main.py
+      - ./utils.py:/app/utils.py
+      - ./static:/app/static
     environment:
       - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=INFO
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          # Ajusta según tu GPU
-          cpus: '4'
-          memory: 8G
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 60s
+    networks:
+      - pls-network
 
+networks:
+  pls-network:
+    driver: bridge

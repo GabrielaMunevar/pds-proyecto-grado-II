@@ -1,24 +1,24 @@
-# Deploy PLS Generator Dashboard to AWS
+# Desplegar Dashboard Generador PLS en AWS
 
-## 🎯 Overview
+## Resumen
 
 Este documento describe cómo desplegar el dashboard PLS Generator en AWS EC2.
 
-## 📋 Prerequisites
+## Prerrequisitos
 
-1. **AWS Account** con permisos para crear instancias EC2
+1. **Cuenta AWS** con permisos para crear instancias EC2
 2. **Modelo entrenado** en `models/t5_generator/`
 3. **Datos** en `data/processed/synthetic_pairs/`
 
-## 🚀 Quick Start
+## Inicio Rápido
 
-### Opción A: Automated Deployment (Recommended)
+### Opción A: Despliegue Automatizado (Recomendado)
 
 ```bash
 # 1. Crear instancia EC2
 # - AMI: Ubuntu 22.04 LTS
-# - Instance Type: t2.small (2GB RAM) o t2.medium (4GB RAM)
-# - Security Group: Allow port 8501
+# - Tipo de Instancia: t2.small (2GB RAM) o t2.medium (4GB RAM)
+# - Grupo de Seguridad: Permitir puerto 8501
 
 # 2. Conectar a la instancia
 ssh -i your-key.pem ubuntu@ec2-XX-XXX-XXX-XX.compute-1.amazonaws.com
@@ -27,19 +27,19 @@ ssh -i your-key.pem ubuntu@ec2-XX-XXX-XXX-XX.compute-1.amazonaws.com
 git clone <your-repo-url>
 cd <project-dir>
 
-# 4. Ejecutar script de deployment
+# 4. Ejecutar script de despliegue
 chmod +x deploy/deploy_aws.sh
 ./deploy/deploy_aws.sh
 ```
 
-### Opción B: Manual Deployment
+### Opción B: Despliegue Manual
 
 ```bash
 # 1. Instalar dependencias
 sudo apt-get update
 sudo apt-get install -y python3-pip python3-venv
 
-# 2. Crear virtual environment
+# 2. Crear entorno virtual
 python3 -m venv venv
 source venv/bin/activate
 
@@ -50,21 +50,21 @@ pip install streamlit torch transformers
 streamlit run src/dashboard/app.py --server.port 8501 --server.address 0.0.0.0
 ```
 
-## ⚙️ Configuration
+## Configuración
 
-### Security Group Settings
+### Configuración de Grupo de Seguridad
 
 En AWS Console → EC2 → Security Groups:
 
 ```
-Inbound Rules:
-  Type: Custom TCP
-  Port: 8501
-  Source: 0.0.0.0/0 (o tu IP específica)
-  Description: Streamlit Dashboard
+Reglas de Entrada:
+  Tipo: Custom TCP
+  Puerto: 8501
+  Origen: 0.0.0.0/0 (o tu IP específica)
+  Descripción: Streamlit Dashboard
 ```
 
-### Environment Variables
+### Variables de Entorno
 
 Crear `.env` o exportar:
 
@@ -73,29 +73,29 @@ export MODEL_PATH="models/t5_generator"
 export DATA_PATH="data/processed"
 ```
 
-## 📊 Resource Requirements
+## Requisitos de Recursos
 
-### Minimum
-- **Instance Type**: t2.small
+### Mínimo
+- **Tipo de Instancia**: t2.small
 - **RAM**: 2GB
-- **Storage**: 20GB
-- **Cost**: ~$15/month
+- **Almacenamiento**: 20GB
+- **Costo**: ~$15/mes
 
-### Recommended
-- **Instance Type**: t2.medium
+### Recomendado
+- **Tipo de Instancia**: t2.medium
 - **RAM**: 4GB
-- **Storage**: 30GB
-- **Cost**: ~$30/month
+- **Almacenamiento**: 30GB
+- **Costo**: ~$30/mes
 
-### Production
-- **Instance Type**: t3.large
+### Producción
+- **Tipo de Instancia**: t3.large
 - **RAM**: 8GB
-- **Storage**: 50GB
-- **Cost**: ~$60/month
+- **Almacenamiento**: 50GB
+- **Costo**: ~$60/mes
 
-## 🔒 Security
+## Seguridad
 
-### 1. HTTPS (Production)
+### 1. HTTPS (Producción)
 
 ```bash
 # Instalar Nginx
@@ -106,14 +106,14 @@ sudo apt-get install certbot python3-certbot-nginx
 sudo certbot --nginx -d your-domain.com
 ```
 
-### 2. Authentication
+### 2. Autenticación
 
 Agregar autenticación en `src/dashboard/app.py`:
 
 ```python
 import streamlit_authenticator as stauth
 
-# Add authentication
+# Agregar autenticación
 authenticator = stauth.Authenticate(
     {'usernames': {'user': 'hashed_password'}},
     'cookie_name',
@@ -121,21 +121,21 @@ authenticator = stauth.Authenticate(
 )
 ```
 
-## 🐛 Troubleshooting
+## Solución de Problemas
 
-### Issue: Port already in use
+### Problema: Puerto ya en uso
 ```bash
 sudo lsof -i :8501
 sudo kill -9 <PID>
 ```
 
-### Issue: Model not found
+### Problema: Modelo no encontrado
 ```bash
 # Verificar estructura
 ls -la models/t5_generator/
 ```
 
-### Issue: Out of memory
+### Problema: Sin memoria
 ```bash
 # Usar modelo más pequeño o aumentar instancia
 # Configurar swap
@@ -145,21 +145,21 @@ sudo mkswap /swapfile
 sudo swapon /swapfile
 ```
 
-## 📈 Monitoring
+## Monitoreo
 
-### System Resource Usage
+### Uso de Recursos del Sistema
 ```bash
 # CPU y RAM
 htop
 
-# Disk
+# Disco
 df -h
 
 # GPU (si aplica)
 nvidia-smi
 ```
 
-### Application Logs
+### Logs de la Aplicación
 ```bash
 # Ver logs
 sudo journalctl -u streamlit -f
@@ -168,14 +168,14 @@ sudo journalctl -u streamlit -f
 sudo journalctl -u streamlit -n 50
 ```
 
-## 💰 Cost Optimization
+## Optimización de Costos
 
-1. **Stop instance** cuando no se use
-2. **Use Spot Instances** para pruebas
+1. **Detener instancia** cuando no se use
+2. **Usar Spot Instances** para pruebas
 3. **Reserved Instances** para producción
-4. **Auto-scaling** si hay alta demanda
+4. **Auto-escalado** si hay alta demanda
 
-## 🔄 Updates
+## Actualizaciones
 
 ```bash
 # Actualizar código
@@ -185,23 +185,21 @@ git pull origin main
 sudo systemctl restart streamlit
 ```
 
-## 📞 Support
+## Soporte
 
 Para problemas o preguntas:
 - Revisar logs: `sudo journalctl -u streamlit`
 - Verificar modelo: `python -c "from transformers import T5Tokenizer; print('OK')"`
-- Test dashboard local: `streamlit run src/dashboard/app.py`
+- Probar dashboard local: `streamlit run src/dashboard/app.py`
 
-## 🌐 Access
+## Acceso
 
-After deployment:
+Después del despliegue:
 ```
 http://<EC2-PUBLIC-IP>:8501
 ```
 
-Example:
+Ejemplo:
 ```
 http://54.123.45.67:8501
 ```
-
-

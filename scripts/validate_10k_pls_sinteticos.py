@@ -425,7 +425,7 @@ class ValidadorPLSSinteticos:
         print(f"   Std:     {self.df['rougeL'].std():.4f}")
         
         # Calcular SARI
-        print("\n ℹ️  SARI Score:")
+        print("\nINFO: SARI Score:")
         print("   SARI requiere referencias humanas reales para ser significativo.")
         print("   Sin referencias apropiadas, el score no es informativo.")
         print("   → SARI desactivado (necesita múltiples referencias de PLS reales)")
@@ -439,7 +439,7 @@ class ValidadorPLSSinteticos:
         sari_score = None
         self.resultados['sari_score'] = None
         
-        print("\n   💡 Alternativa: ROUGE es suficiente para medir:")
+        print("\n   Alternativa: ROUGE es suficiente para medir:")
         print("      - Conservación de contenido (ROUGE-1)")
         print("      - Conservación de frases (ROUGE-2)")
         print("      - Conservación de estructura (ROUGE-L)")
@@ -462,7 +462,7 @@ class ValidadorPLSSinteticos:
         if rouge1_mean > 0.5:
             print("  ✓ ROUGE-1 > 0.5: Buena conservación del contenido original")
         elif rouge1_mean > 0.3:
-            print("  ⚠ ROUGE-1 0.3-0.5: Conservación moderada del contenido")
+            print("  [ADV] ROUGE-1 0.3-0.5: Conservación moderada del contenido")
         else:
             print("  ✗ ROUGE-1 < 0.3: Baja conservación (posible paráfrasis excesiva)")
         

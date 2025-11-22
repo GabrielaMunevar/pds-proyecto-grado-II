@@ -24,47 +24,47 @@ def mostrar_comparacion(df_v1, df_v2):
     """Muestra comparación de métricas entre dos versiones"""
     
     print("="*70)
-    print("📊 COMPARACIÓN DE VERSIONES DEL PROMPT")
+    print("COMPARACIÓN DE VERSIONES DEL PROMPT")
     print("="*70)
     
     if df_v1 is None:
-        print("\n⚠️  No se encontró archivo V1")
+        print("\nADVERTENCIA: No se encontró archivo V1")
         return
     
     if df_v2 is None:
-        print("\n⚠️  No se encontró archivo V2")
+        print("\nADVERTENCIA: No se encontró archivo V2")
         return
     
-    print(f"\n📝 LONGITUD DE PLS:")
+    print(f"\nLONGITUD DE PLS:")
     print(f"   V1 (original):     {df_v1['longitud_pls'].mean():.1f} palabras")
     print(f"   V2 (simplificado): {df_v2['longitud_pls'].mean():.1f} palabras")
     diff_longitud = df_v2['longitud_pls'].mean() - df_v1['longitud_pls'].mean()
     print(f"   Diferencia:        {diff_longitud:+.1f} palabras")
     
-    print(f"\n📖 FLESCH READING EASE (60-70 = TARGET):")
+    print(f"\nFLESCH READING EASE (60-70 = TARGET):")
     print(f"   V1 (original):     {df_v1['flesch_reading_ease'].mean():.1f}")
     print(f"   V2 (simplificado): {df_v2['flesch_reading_ease'].mean():.1f}")
     diff_flesch = df_v2['flesch_reading_ease'].mean() - df_v1['flesch_reading_ease'].mean()
-    mejora_flesch = "✅ MEJORA" if diff_flesch > 0 else "❌ EMPEORA"
+    mejora_flesch = "[OK] MEJORA" if diff_flesch > 0 else "[X] EMPEORA"
     print(f"   Diferencia:        {diff_flesch:+.1f} {mejora_flesch}")
     
-    print(f"\n🎓 FLESCH-KINCAID GRADE (~8.0 = TARGET):")
+    print(f"\nFLESCH-KINCAID GRADE (~8.0 = TARGET):")
     print(f"   V1 (original):     {df_v1['flesch_kincaid_grade'].mean():.1f}")
     print(f"   V2 (simplificado): {df_v2['flesch_kincaid_grade'].mean():.1f}")
     diff_grade = df_v2['flesch_kincaid_grade'].mean() - df_v1['flesch_kincaid_grade'].mean()
-    mejora_grade = "✅ MEJORA" if diff_grade < 0 else "❌ EMPEORA"
+    mejora_grade = "[OK] MEJORA" if diff_grade < 0 else "[X] EMPEORA"
     print(f"   Diferencia:        {diff_grade:+.1f} {mejora_grade}")
     
-    print(f"\n🗜️  RATIO DE COMPRESIÓN:")
+    print(f"\nRATIO DE COMPRESIÓN:")
     print(f"   V1 (original):     {df_v1['ratio_compresion'].mean():.2f}")
     print(f"   V2 (simplificado): {df_v2['ratio_compresion'].mean():.2f}")
     
-    print(f"\n💰 COSTO PROMEDIO:")
+    print(f"\nCOSTO PROMEDIO:")
     print(f"   V1 (original):     ${df_v1['costo_estimado'].mean():.6f}")
     print(f"   V2 (simplificado): ${df_v2['costo_estimado'].mean():.6f}")
     
     print("\n" + "="*70)
-    print("🎯 EVALUACIÓN:")
+    print("EVALUACIÓN:")
     print("="*70)
     
     # Evaluar si V2 está más cerca de los targets
@@ -75,14 +75,14 @@ def mostrar_comparacion(df_v1, df_v2):
     v2_grade_dist = abs(df_v2['flesch_kincaid_grade'].mean() - 8.0)
     
     if v2_flesch_dist < v1_flesch_dist:
-        print("✅ V2 está más cerca del target Flesch Reading Ease (60-70)")
+        print("[OK] V2 está más cerca del target Flesch Reading Ease (60-70)")
     else:
-        print("❌ V2 está más lejos del target Flesch Reading Ease (60-70)")
+        print("[X] V2 está más lejos del target Flesch Reading Ease (60-70)")
     
     if v2_grade_dist < v1_grade_dist:
-        print("✅ V2 está más cerca del target Flesch-Kincaid Grade (~8.0)")
+        print("[OK] V2 está más cerca del target Flesch-Kincaid Grade (~8.0)")
     else:
-        print("❌ V2 está más lejos del target Flesch-Kincaid Grade (~8.0)")
+        print("[X] V2 está más lejos del target Flesch-Kincaid Grade (~8.0)")
     
     # Visualización
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
@@ -107,7 +107,7 @@ def mostrar_comparacion(df_v1, df_v2):
     
     plt.tight_layout()
     plt.savefig('comparacion_prompts.png', dpi=300, bbox_inches='tight')
-    print("\n📊 Gráfico guardado en: comparacion_prompts.png")
+    print("\nGráfico guardado en: comparacion_prompts.png")
     plt.show()
 
 
@@ -118,7 +118,7 @@ def main():
     archivo_v1 = Path('../data/synthetic_pls/pls_prueba_50.csv')
     archivo_v2 = Path('../data/synthetic_pls/pls_prueba_50_v2.csv')
     
-    print("\n🔍 Buscando archivos...")
+    print("\nBuscando archivos...")
     print(f"   V1: {archivo_v1}")
     print(f"   V2: {archivo_v2}")
     
@@ -126,11 +126,11 @@ def main():
     df_v2 = cargar_datos(archivo_v2)
     
     if df_v1 is None:
-        print(f"\n⚠️  No se encontró {archivo_v1}")
+        print(f"\nADVERTENCIA: No se encontró {archivo_v1}")
         print("   Debe existir el archivo de la primera prueba (50 PLS con prompt original)")
     
     if df_v2 is None:
-        print(f"\n⚠️  No se encontró {archivo_v2}")
+        print(f"\nADVERTENCIA: No se encontró {archivo_v2}")
         print("   Primero genera 50 PLS con el nuevo prompt:")
         print("   1. cd scripts")
         print("   2. python generar_pls_sinteticos.py")

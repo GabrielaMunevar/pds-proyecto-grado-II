@@ -1,0 +1,51 @@
+# ============================================================================
+# Example Terraform Variables
+# Copy this file to terraform.tfvars and customize
+# ============================================================================
+
+aws_region = "us-east-1"
+environment = "prod"
+project_name = "medical-pls-api"
+
+# VPC Configuration
+vpc_cidr = "10.0.0.0/16"
+enable_nat_gateway = false  # Set to true for production with private subnets
+
+# ECS Configuration
+task_cpu = 2048      # 2 vCPU
+task_memory = 4096   # 4 GB
+desired_count = 1
+min_capacity = 1
+max_capacity = 5
+cpu_target_value = 70.0
+
+# DVC S3 Configuration
+# Usar el bucket S3 existente de DVC donde están los modelos
+dvc_s3_bucket = "pds-pls-data-prod"
+dvc_s3_prefix = "dvcstore"
+
+# Logging
+log_retention_days = 7
+log_level = "INFO"
+enable_container_insights = true
+
+# API Configuration
+cors_origins = "*"
+max_length = 256
+num_beams = 4
+max_input_length = 512
+chunk_size = 400
+chunk_overlap = 50
+debug = false
+
+# Additional Environment Variables (optional)
+# additional_env_vars = [
+#   {
+#     name  = "CUSTOM_VAR"
+#     value = "custom_value"
+#   }
+# ]
+
+# ALB Configuration
+enable_deletion_protection = false  # Set to true for production
+

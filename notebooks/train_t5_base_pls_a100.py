@@ -27,12 +27,12 @@ warnings.filterwarnings('ignore')
 def check_and_install_dependencies():
     """Verifica e instala dependencias si es necesario"""
     print("="*80)
-    print("📦 VERIFICANDO DEPENDENCIAS")
+    print("VERIFICANDO DEPENDENCIAS")
     print("="*80)
     
     # Si el usuario quiere saltar la verificación (para cuando ya reinició)
     if os.environ.get('SKIP_INSTALL') == '1':
-        print("✅ Saltando instalación (SKIP_INSTALL=1)\n")
+        print("Saltando instalación (SKIP_INSTALL=1)\n")
         return False
     
     # Verificación simple: intentar importar transformers sin subprocess
@@ -42,15 +42,15 @@ def check_and_install_dependencies():
         import importlib.util
         spec = importlib.util.find_spec("transformers")
         if spec is not None:
-            print("✅ Dependencias ya instaladas, saltando instalación\n")
-            print("💡 Si esto causó errores, ejecuta antes del script:")
+            print("Dependencias ya instaladas, saltando instalación\n")
+            print("Si esto causó errores, ejecuta antes del script:")
             print("   import os; os.environ['SKIP_INSTALL'] = '1'")
             return False
     except Exception as e:
         print(f"   (Verificación: {e})")
         pass
     
-    print("📥 Instalando dependencias...\n")
+    print("Instalando dependencias...\n")
     
     # Fix pyarrow incompatibility (común en Colab)
     print("  • Reinstalando pyarrow...")
@@ -69,8 +69,8 @@ def check_and_install_dependencies():
     print("  • Instalando utilidades...")
     os.system("pip install -q 'textstat>=0.7.3' 'sentencepiece>=0.1.99'")
     
-    print("\n✅ Instalación completada")
-    print("⚠️  IMPORTANTE: Debes REINICIAR el runtime ahora\n")
+    print("\nInstalación completada")
+    print("IMPORTANTE: Debes REINICIAR el runtime ahora\n")
     return True  # Necesita reinicio
 
 # Verificar e instalar
@@ -78,7 +78,7 @@ needs_restart = check_and_install_dependencies()
 
 if needs_restart:
     print("="*80)
-    print("🔄 ACCIÓN REQUERIDA")
+    print("ACCIÓN REQUERIDA")
     print("="*80)
     print("1. Ve a: Runtime → Restart runtime")
     print("2. Vuelve a ejecutar: %run train_t5_base_pls_a100.py")
@@ -91,7 +91,7 @@ if needs_restart:
 # 2. IMPORTACIONES
 # ============================================================================
 
-print("📚 Importando librerías...")
+print("Importando librerías...")
 
 import torch
 from transformers import (
@@ -120,59 +120,67 @@ nltk.download('wordnet', quiet=True)
 # Configurar matplotlib
 # Estilos de matplotlib/seaborn solo se usan en evaluación
 
-print("✅ Importaciones completadas\n")
+print("Importaciones completadas\n")
 
 # ============================================================================
 # 3. CONFIGURACIÓN GLOBAL
 # ============================================================================
 
-class Config:
-    """Configuración del experimento"""
-    # Rutas - se configurarán dinámicamente en main()
-    CSV_PATH = None  # Se detectará automáticamente
-    DRIVE_BASE = '/content/drive/MyDrive/PLS_Project'
-    MODEL_DIR = None
-    RESULTS_DIR = None
-    PLOTS_DIR = None
+# Importar configuración centralizada
+try:
+    from config_model import ModelConfig, setup_paths
+    config = ModelConfig()
+except ImportError:
+    # Fallback si config_model.py no está disponible (compatibilidad)
+    print("ADVERTENCIA: No se encontró config_model.py, usando configuración local")
+    class Config:
+        """Configuración del experimento (fallback)"""
+        # Rutas - se configurarán dinámicamente en main()
+        CSV_PATH = None
+        DRIVE_BASE = '/content/drive/MyDrive/PLS_Project'
+        MODEL_DIR = None
+        RESULTS_DIR = None
+        PLOTS_DIR = None
+        
+        # Modelo
+        MODEL_NAME = 't5-base'
+        TASK_PREFIX = 'simplify medical text: '
+        
+        # Tokenización
+        MAX_INPUT_LENGTH = 512
+        MAX_TARGET_LENGTH = 256
+        
+        # Chunking semántico
+        CHUNK_SIZE = 400
+        CHUNK_OVERLAP = 50
+        SEPARATORS = ["\n\n", "\n", ". ", " "]
+        
+        # Training
+        NUM_EPOCHS = 3
+        LEARNING_RATE = 3e-4
+        BATCH_SIZE = 16
+        GRAD_ACCUM_STEPS = 2
+        WARMUP_STEPS = 500
+        WEIGHT_DECAY = 0.01
+        
+        # Evaluación
+        EVAL_STEPS = 200
+        SAVE_STEPS = 200
+        SAVE_TOTAL_LIMIT = 3
+        
+        # Generación
+        NUM_BEAMS = 4
+        
+        # Semilla
+        SEED = 42
     
-    # Modelo
-    MODEL_NAME = 't5-base'
-    TASK_PREFIX = 'simplify medical text: '
-    
-    # Tokenización
-    MAX_INPUT_LENGTH = 512
-    MAX_TARGET_LENGTH = 256
-    
-    # Chunking semántico
-    CHUNK_SIZE = 400  # tokens
-    CHUNK_OVERLAP = 50  # tokens
-    SEPARATORS = ["\n\n", "\n", ". ", " "]
-    
-    # Training (optimizado para A100)
-    NUM_EPOCHS = 3
-    LEARNING_RATE = 3e-4
-    BATCH_SIZE = 16  # A100 puede manejar esto
-    GRAD_ACCUM_STEPS = 2  # Effective batch = 32
-    WARMUP_STEPS = 500
-    WEIGHT_DECAY = 0.01
-    
-    # Evaluación
-    EVAL_STEPS = 200
-    SAVE_STEPS = 200
-    SAVE_TOTAL_LIMIT = 3
-    
-    # Generación
-    NUM_BEAMS = 4
-    
-    # Semilla
-    SEED = 42
-
-config = Config()
+    config = Config()
+    setup_paths = None
 
 def find_csv_file():
     """Busca el archivo CSV en múltiples ubicaciones posibles"""
     print("="*80)
-    print("🔍 BUSCANDO ARCHIVO CSV")
+    print("BUSCANDO ARCHIVO CSV")
     print("="*80)
     
     # Posibles ubicaciones
@@ -187,7 +195,7 @@ def find_csv_file():
     # Buscar en ubicaciones conocidas
     for path in possible_paths:
         if os.path.exists(path):
-            print(f"✅ Archivo encontrado: {path}\n")
+            print(f"Archivo encontrado: {path}\n")
             return path
     
     # Si no se encuentra, buscar en todo Drive
@@ -202,30 +210,30 @@ def find_csv_file():
         )
         if result.stdout.strip():
             found_path = result.stdout.strip().split('\n')[0]
-            print(f"✅ Archivo encontrado: {found_path}\n")
+            print(f"Archivo encontrado: {found_path}\n")
             return found_path
     except:
         pass
     
     # Si no se encuentra, ofrecer subir archivo
-    print("❌ No se encontró el archivo CSV en Drive\n")
+    print("ERROR: No se encontró el archivo CSV en Drive\n")
     print("="*80)
     print("💡 SOLUCIONES:")
     print("="*80)
-    print("\n📤 OPCIÓN 1: Subir archivo a Colab (MÁS RÁPIDO)")
+    print("\nOPCIÓN 1: Subir archivo a Colab (MÁS RÁPIDO)")
     print("   Ejecuta en una celda:")
     print("   from google.colab import files")
     print("   uploaded = files.upload()")
     print("   # Selecciona: pls_10k_final_aprobados.csv")
     print("   # Luego vuelve a ejecutar el script")
     
-    print("\n📁 OPCIÓN 2: Especificar ruta manualmente")
+    print("\nOPCIÓN 2: Especificar ruta manualmente")
     print("   Si sabes dónde está el archivo, ejecuta:")
     print("   import os")
     print("   os.environ['CSV_PATH'] = '/ruta/completa/al/archivo.csv'")
     print("   # Luego vuelve a ejecutar el script")
     
-    print("\n📋 OPCIÓN 3: Listar contenido de Drive")
+    print("\nOPCIÓN 3: Listar contenido de Drive")
     print("   Ejecuta para ver la estructura:")
     print("   !ls -R /content/drive/MyDrive/PLS_Project/")
     print("\n" + "="*80)
@@ -241,24 +249,30 @@ def setup_config():
         csv_path = find_csv_file()
     
     if not csv_path:
-        print("\n❌ No se puede continuar sin el archivo CSV")
+        print("\nERROR: No se puede continuar sin el archivo CSV")
         import sys
         sys.exit(1)
     
-    # Configurar rutas
+    # Configurar CSV path
     config.CSV_PATH = csv_path
-    config.MODEL_DIR = f'{config.DRIVE_BASE}/models/t5_pls/final'
-    config.RESULTS_DIR = f'{config.DRIVE_BASE}/results'
-    config.PLOTS_DIR = f'{config.RESULTS_DIR}/plots'
     
-    # Crear directorios
-    os.makedirs(config.MODEL_DIR, exist_ok=True)
-    os.makedirs(config.RESULTS_DIR, exist_ok=True)
-    os.makedirs(config.PLOTS_DIR, exist_ok=True)
+    # Configurar rutas usando setup_paths si está disponible
+    if setup_paths:
+        setup_paths(drive_base=config.DRIVE_BASE)
+    else:
+        # Fallback: configurar manualmente
+        config.MODEL_DIR = f'{config.DRIVE_BASE}/models/t5_pls/final'
+        config.RESULTS_DIR = f'{config.DRIVE_BASE}/results'
+        config.PLOTS_DIR = f'{config.RESULTS_DIR}/plots'
+        
+        # Crear directorios
+        os.makedirs(config.MODEL_DIR, exist_ok=True)
+        os.makedirs(config.RESULTS_DIR, exist_ok=True)
+        os.makedirs(config.PLOTS_DIR, exist_ok=True)
     
     # Mostrar configuración
     print("="*80)
-    print("⚙️  CONFIGURACIÓN")
+    print("CONFIGURACIÓN")
     print("="*80)
     print(f"CSV: {config.CSV_PATH}")
     print(f"Modelo: {config.MODEL_NAME}")
@@ -276,11 +290,11 @@ def setup_config():
 def cargar_datos(csv_path: str) -> pd.DataFrame:
     """Carga y valida el dataset"""
     print("="*80)
-    print("📂 CARGA DE DATOS")
+    print("CARGA DE DATOS")
     print("="*80)
     
     df = pd.read_csv(csv_path)
-    print(f"✅ Dataset cargado: {len(df):,} filas")
+    print(f"Dataset cargado: {len(df):,} filas")
     
     # Renombrar columnas
     df = df.rename(columns={
@@ -293,13 +307,13 @@ def cargar_datos(csv_path: str) -> pd.DataFrame:
     df = df[df['input'].str.strip() != '']
     df = df[df['target'].str.strip() != '']
     
-    print(f"✅ Después de limpieza: {len(df):,} filas")
+    print(f"Después de limpieza: {len(df):,} filas")
     
     # Estadísticas
     df['input_words'] = df['input'].str.split().str.len()
     df['target_words'] = df['target'].str.split().str.len()
     
-    print(f"\n📊 Estadísticas:")
+    print(f"\nEstadísticas:")
     print(f"  Input words: {df['input_words'].mean():.1f} ± {df['input_words'].std():.1f}")
     print(f"  Target words: {df['target_words'].mean():.1f} ± {df['target_words'].std():.1f}")
     print(f"  Compression ratio: {(df['target_words']/df['input_words']).mean():.2f}\n")
@@ -313,7 +327,7 @@ def cargar_datos(csv_path: str) -> pd.DataFrame:
 def setup_chunking(tokenizer):
     """Configura el text splitter semántico"""
     print("="*80)
-    print("✂️  CONFIGURACIÓN CHUNKING SEMÁNTICO")
+    print("CONFIGURACIÓN CHUNKING SEMÁNTICO")
     print("="*80)
     
     # Función para contar tokens
@@ -329,7 +343,7 @@ def setup_chunking(tokenizer):
         is_separator_regex=False
     )
     
-    print(f"✅ Text Splitter configurado")
+    print(f"Text Splitter configurado")
     print(f"  - Chunk size: {config.CHUNK_SIZE} tokens")
     print(f"  - Overlap: {config.CHUNK_OVERLAP} tokens")
     print(f"  - Separators: {config.SEPARATORS}")
@@ -361,7 +375,7 @@ def aplicar_chunking(texto: str, target: str, text_splitter, length_function) ->
 def preparar_dataset_con_chunking(df: pd.DataFrame, text_splitter, length_function):
     """Prepara dataset aplicando chunking donde sea necesario"""
     print("="*80)
-    print("🔄 APLICANDO CHUNKING")
+    print("APLICANDO CHUNKING")
     print("="*80)
     
     all_examples = []
@@ -377,7 +391,7 @@ def preparar_dataset_con_chunking(df: pd.DataFrame, text_splitter, length_functi
             total_chunks += len(chunks)
     
     # Estadísticas
-    print(f"\n📊 Estadísticas de Chunking:")
+    print(f"\nEstadísticas de Chunking:")
     print(f"  - Textos originales: {len(df):,}")
     print(f"  - Ejemplos de entrenamiento: {len(all_examples):,}")
     print(f"  - Textos con chunking: {textos_con_chunking:,} ({textos_con_chunking/len(df)*100:.1f}%)")
@@ -395,7 +409,7 @@ def preparar_dataset_con_chunking(df: pd.DataFrame, text_splitter, length_functi
 def split_dataset(df: pd.DataFrame, train_ratio=0.8, val_ratio=0.1):
     """Split dataset en train/val/test"""
     print("="*80)
-    print("✂️  SPLIT DATASET")
+    print("SPLIT DATASET")
     print("="*80)
     
     # Identificar textos únicos para evitar leakage
@@ -417,7 +431,7 @@ def split_dataset(df: pd.DataFrame, train_ratio=0.8, val_ratio=0.1):
     val_df = df[df['input'].isin(val_inputs)].copy()
     test_df = df[df['input'].isin(test_inputs)].copy()
     
-    print(f"✅ Split completado:")
+    print(f"Split completado:")
     print(f"  - Train: {len(train_df):,} ejemplos ({len(train_inputs):,} textos únicos)")
     print(f"  - Val: {len(val_df):,} ejemplos ({len(val_inputs):,} textos únicos)")
     print(f"  - Test: {len(test_df):,} ejemplos ({len(test_inputs):,} textos únicos)")
@@ -500,7 +514,7 @@ def compute_metrics_simple(eval_pred, tokenizer):
         decoded_preds = tokenizer.batch_decode(predictions, skip_special_tokens=True)
         decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
     except Exception as e:
-        print(f"⚠️  Error al decodificar: {e}")
+        print(f"ADVERTENCIA: Error al decodificar: {e}")
         # Retornar métricas dummy en caso de error
         return {
             'rouge1': 0.0,
@@ -545,7 +559,7 @@ def compute_metrics_simple(eval_pred, tokenizer):
 def train_model(train_dataset, val_dataset, tokenizer, model):
     """Entrena el modelo T5"""
     print("="*80)
-    print("🚀 ENTRENAMIENTO")
+    print("ENTRENAMIENTO")
     print("="*80)
     
     # Configurar argumentos de entrenamiento
@@ -592,12 +606,12 @@ def train_model(train_dataset, val_dataset, tokenizer, model):
         push_to_hub=False,
     )
     
-    print(f"✅ Training arguments configurados")
+    print(f"Training arguments configurados")
     print(f"  - Épocas: {config.NUM_EPOCHS}")
     print(f"  - Batch size efectivo: {config.BATCH_SIZE * config.GRAD_ACCUM_STEPS}")
     print(f"  - Learning rate: {config.LEARNING_RATE}")
     print(f"  - BF16: True (A100)")
-    print(f"\n💾 CHECKPOINTS AUTOMÁTICOS:")
+    print(f"\nCHECKPOINTS AUTOMÁTICOS:")
     print(f"  - Guardando cada {config.SAVE_STEPS} steps en: ./results/")
     print(f"  - Se mantienen los últimos {config.SAVE_TOTAL_LIMIT} checkpoints")
     print(f"  - Si se interrumpe, puedes reanudar desde el último checkpoint")
@@ -626,16 +640,16 @@ def train_model(train_dataset, val_dataset, tokenizer, model):
         compute_metrics=compute_metrics_fn,
     )
     
-    print(f"✅ Seq2SeqTrainer inicializado")
+    print(f"Seq2SeqTrainer inicializado")
     print(f"  - Train examples: {len(train_dataset):,}")
     print(f"  - Eval examples: {len(val_dataset):,}")
     print()
     
     # Entrenar
-    print("🚀 Iniciando entrenamiento...")
-    print("⏱️  Tiempo estimado: ~45-90 minutos en A100 GPU")
-    print("💡 Con batch size 16 y BF16 precision")
-    print("\n⚠️  IMPORTANTE: El modelo se guardará AUTOMÁTICAMENTE:")
+    print("Iniciando entrenamiento...")
+    print("Tiempo estimado: ~45-90 minutos en A100 GPU")
+    print("Con batch size 16 y BF16 precision")
+    print("\nIMPORTANTE: El modelo se guardará AUTOMÁTICAMENTE:")
     print("   1. Cada 200 steps → checkpoints en ./results/checkpoint-XXX/")
     print("   2. Al finalizar → modelo completo en Drive")
     print("   3. Antes de evaluar → copia de seguridad adicional\n")
@@ -643,17 +657,17 @@ def train_model(train_dataset, val_dataset, tokenizer, model):
     try:
         train_result = trainer.train()
     except KeyboardInterrupt:
-        print("\n⚠️  Entrenamiento interrumpido manualmente")
+        print("\nADVERTENCIA: Entrenamiento interrumpido manualmente")
         print("💾 Los checkpoints están guardados en: ./results/")
         print("   Para continuar desde el último checkpoint, ejecuta:")
         print("   trainer.train(resume_from_checkpoint=True)")
         raise
     except Exception as e:
-        print(f"\n❌ ERROR durante entrenamiento: {e}")
+        print(f"\nERROR durante entrenamiento: {e}")
         print("💾 Los checkpoints están guardados en: ./results/")
         raise
     
-    print("\n✅ Entrenamiento completado!")
+    print("\nEntrenamiento completado!")
     print(f"  - Training loss: {train_result.training_loss:.4f}")
     print(f"  - Total steps: {train_result.global_step}")
     print(f"  - Total time: {train_result.metrics['train_runtime']:.2f}s ({train_result.metrics['train_runtime']/60:.1f} min)")
@@ -671,7 +685,7 @@ def train_model(train_dataset, val_dataset, tokenizer, model):
     with open(f'{config.RESULTS_DIR}/training_history.json', 'w') as f:
         json.dump(training_history, f, indent=2)
     
-    print(f"💾 Historial guardado en: {config.RESULTS_DIR}/training_history.json\n")
+    print(f"Historial guardado en: {config.RESULTS_DIR}/training_history.json\n")
     
     return trainer, training_history
 
@@ -682,23 +696,23 @@ def train_model(train_dataset, val_dataset, tokenizer, model):
 def export_model(trainer, tokenizer):
     """Exporta modelo a Google Drive"""
     print("="*80)
-    print("💾 EXPORTANDO MODELO A DRIVE")
+    print("EXPORTANDO MODELO A DRIVE")
     print("="*80)
     
     try:
         # Guardar modelo
-        print("📝 Guardando modelo...")
+        print("Guardando modelo...")
         trainer.model.save_pretrained(config.MODEL_DIR)
         tokenizer.save_pretrained(config.MODEL_DIR)
         
-        print(f"✅ Modelo guardado en: {config.MODEL_DIR}")
+        print(f"Modelo guardado en: {config.MODEL_DIR}")
         print(f"  - model.safetensors / pytorch_model.bin")
         print(f"  - config.json")
         print(f"  - tokenizer files")
         
         # También copiar checkpoints a Drive como respaldo adicional
         checkpoints_dir = f'{config.DRIVE_BASE}/checkpoints_backup'
-        print(f"\n📦 Copiando checkpoints a Drive como respaldo...")
+        print(f"\nCopiando checkpoints a Drive como respaldo...")
         os.makedirs(checkpoints_dir, exist_ok=True)
         
         # Copiar el último checkpoint
@@ -712,12 +726,12 @@ def export_model(trainer, tokenizer):
                 
                 print(f"   Copiando {last_checkpoint} a Drive...")
                 os.system(f"cp -r {last_checkpoint_path} {checkpoints_dir}/")
-                print(f"   ✅ Checkpoint respaldado en: {checkpoints_dir}/{last_checkpoint}")
+                print(f"   Checkpoint respaldado en: {checkpoints_dir}/{last_checkpoint}")
         
         print()
         
     except Exception as e:
-        print(f"⚠️  Error al guardar en Drive: {e}")
+        print(f"ADVERTENCIA: Error al guardar en Drive: {e}")
         print(f"   Intentando guardar localmente en ./results/")
         
         # Fallback: guardar en local
@@ -725,7 +739,7 @@ def export_model(trainer, tokenizer):
         os.makedirs(local_dir, exist_ok=True)
         trainer.model.save_pretrained(local_dir)
         tokenizer.save_pretrained(local_dir)
-        print(f"   ✅ Modelo guardado localmente en: {local_dir}")
+        print(f"   Modelo guardado localmente en: {local_dir}")
         print(f"   Puedes copiarlo a Drive manualmente después")
         print()
 
@@ -813,22 +827,22 @@ def generar_pls(texto_tecnico: str, model, tokenizer, text_splitter,
 def main():
     """Función principal"""
     print("\n" + "="*80)
-    print("🚀 T5-BASE TRAINING FOR MEDICAL PLS")
+    print("T5-BASE TRAINING FOR MEDICAL PLS")
     print("    Con Chunking Semántico LangChain")
     print("    Optimizado para GPU A100")
     print("="*80 + "\n")
     
     # Montar Google Drive (si es necesario)
-    print("📂 Verificando Google Drive...")
+    print("Verificando Google Drive...")
     try:
         from google.colab import drive
         if not os.path.exists('/content/drive/MyDrive'):
             drive.mount('/content/drive', force_remount=False)
-            print("✅ Drive montado\n")
+            print("Drive montado\n")
         else:
-            print("✅ Drive ya está montado\n")
+            print("Drive ya está montado\n")
     except Exception as e:
-        print(f"⚠️  No se pudo montar Drive: {e}")
+        print(f"ADVERTENCIA: No se pudo montar Drive: {e}")
         print("   Se intentará usar archivo local\n")
     
     # Configurar rutas y buscar archivo CSV
@@ -839,11 +853,11 @@ def main():
     
     # 2. Cargar modelo y tokenizer
     print("="*80)
-    print("🤖 CARGANDO MODELO Y TOKENIZER")
+    print("CARGANDO MODELO Y TOKENIZER")
     print("="*80)
     tokenizer = AutoTokenizer.from_pretrained(config.MODEL_NAME)
     model = AutoModelForSeq2SeqLM.from_pretrained(config.MODEL_NAME)
-    print(f"✅ {config.MODEL_NAME} cargado")
+    print(f"{config.MODEL_NAME} cargado")
     print(f"  - Parámetros: {sum(p.numel() for p in model.parameters()):,}")
     print()
     
@@ -852,7 +866,7 @@ def main():
     
     # 4. Split ANTES de chunking (evitar data leakage)
     print("="*80)
-    print("⚠️  IMPORTANTE: Split ANTES de chunking (evitar data leakage)")
+    print("IMPORTANTE: Split ANTES de chunking (evitar data leakage)")
     print("="*80)
     
     # Identificar textos únicos
@@ -864,7 +878,7 @@ def main():
     train_unique, temp = train_test_split(unique_df, test_size=0.2, random_state=config.SEED)
     val_unique, test_unique = train_test_split(temp, test_size=0.5, random_state=config.SEED)
     
-    print(f"✅ Split por textos únicos:")
+    print(f"Split por textos únicos:")
     print(f"  - Train: {len(train_unique):,}")
     print(f"  - Val: {len(val_unique):,}")
     print(f"  - Test: {len(test_unique):,}\n")
@@ -884,7 +898,7 @@ def main():
     # Guardar test set completo para evaluación posterior
     test_csv_path = f'{config.RESULTS_DIR}/test_set_complete.csv'
     test_df_complete[['input', 'target']].to_csv(test_csv_path, index=False)
-    print(f"💾 Test set completo guardado: {test_csv_path}")
+    print(f"Test set completo guardado: {test_csv_path}")
     print(f"   - {len(test_df_complete):,} documentos completos (sin chunking)")
     print(f"   - Para evaluación: usar evaluate_t5_base_pls_a100.py\n")
     
@@ -893,27 +907,27 @@ def main():
     
     # 6. Tokenizar
     print("="*80)
-    print("🔤 TOKENIZACIÓN")
+    print("TOKENIZACIÓN")
     print("="*80)
     train_dataset = tokenize_dataset(train_df, tokenizer, "Tokenizando train")
     val_dataset = tokenize_dataset(val_df, tokenizer, "Tokenizando val")
     test_dataset = tokenize_dataset(test_df, tokenizer, "Tokenizando test")
-    print("✅ Tokenización completada\n")
+    print("Tokenización completada\n")
     
     # 7. Entrenar
     trainer, training_history = train_model(train_dataset, val_dataset, tokenizer, model)
     
     # 8. GUARDAR MODELO
     print("="*80)
-    print("💾 GUARDANDO MODELO")
+    print("GUARDANDO MODELO")
     print("="*80)
     export_model(trainer, tokenizer)
-    print("✅ Modelo guardado")
+    print("Modelo guardado")
     print(f"📁 Ubicación: {config.MODEL_DIR}\n")
     
     # 9. Ejemplo de inferencia rápida
     print("="*80)
-    print("🧪 EJEMPLO DE INFERENCIA RÁPIDA")
+    print("EJEMPLO DE INFERENCIA RÁPIDA")
     print("="*80)
     ejemplo = test_df_complete.iloc[0]['input']
     pls_generado = generar_pls(ejemplo, trainer.model, tokenizer, text_splitter)
@@ -921,10 +935,10 @@ def main():
     print(f"\nGENERATED PLS: {pls_generado[:200]}...")
     print("\n" + "="*80)
     
-    print("\n🎉 ¡ENTRENAMIENTO COMPLETADO!")
-    print(f"🤖 Modelo guardado en: {config.MODEL_DIR}")
-    print(f"📊 Test set completo guardado en: {config.RESULTS_DIR}/test_set_complete.csv")
-    print(f"\n📝 PRÓXIMOS PASOS:")
+    print("\nENTRENAMIENTO COMPLETADO!")
+    print(f"Modelo guardado en: {config.MODEL_DIR}")
+    print(f"Test set completo guardado en: {config.RESULTS_DIR}/test_set_complete.csv")
+    print(f"\nPRÓXIMOS PASOS:")
     print(f"   Para evaluar el modelo con todas las métricas, ejecuta:")
     print(f"   %run evaluate_t5_base_pls_a100.py")
     print("="*80 + "\n")
