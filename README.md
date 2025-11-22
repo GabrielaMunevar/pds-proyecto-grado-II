@@ -11,20 +11,23 @@ El repositorio está organizado de la siguiente manera:
 - **`data/`**: Contiene muestras y estructura de los datos utilizados para entrenamiento y pruebas.
   - `raw/`: Datasets originales.
   - `processed/`: Datos limpiados y preprocesados.
-- **`api/`**: Código fuente para la API REST (FastAPI) y configuraciones de despliegue.
+- **`api/`**: Código fuente para la API REST (FastAPI) con frontend integrado y configuraciones de despliegue.
+  - **`main.py`**: Servidor FastAPI con endpoints REST y servidor de archivos estáticos.
+  - **`static/`**: Frontend web (HTML, CSS, JavaScript) integrado en la API.
   - **`config.py`**: Configuración centralizada de la API usando variables de entorno.
   - **`.env`**: Archivo de configuración local (crear manualmente, ver `README_CONFIG.md`).
   - **`README_CONFIG.md`**: Documentación completa de configuración con todas las variables disponibles.
-- **`src/`**: Código fuente para el dashboard de Streamlit (`src/dashboard/`) y scripts de utilidades.
+- **`src/`**: Código fuente del proyecto organizado en módulos:
+  - **`models/`**: Módulos para entrenamiento y evaluación de modelos (T5, clasificadores).
+  - **`data/`**: Scripts para procesamiento y creación de datasets.
+  - **`utils/`**: Utilidades compartidas (métricas de evaluación, chunking de texto, análisis de longitud).
+  - **`config.py`**: Configuración centralizada del proyecto (prompts, modelos, etc.).
 - **`params.yaml`**: Archivo de configuración central del proyecto (parametrización).
-- **`src/config.py`**: Configuración centralizada del proyecto (prompts, modelos, etc.).
 
 ## Entregables y Enlaces
 
-- **Repositorio GitHub**: [Enlace al Repositorio GitHub](LINK_TO_GITHUB_REPO)
+- **Repositorio GitHub**: [https://github.com/GabrielaMunevar/pds-proyecto-grado-II](https://github.com/GabrielaMunevar/pds-proyecto-grado-II)
 - **Aplicación Desplegada**: [Enlace a la Aplicación Desplegada](LINK_TO_DEPLOYED_APP)
-
-*(Nota: Por favor actualiza los enlaces anteriores con las URLs reales)*
 
 ## Instrucciones de Uso
 
@@ -38,8 +41,8 @@ El repositorio está organizado de la siguiente manera:
 
 1. Clonar el repositorio:
    ```bash
-   git clone <repository_url>
-   cd <repository_name>
+   git clone https://github.com/GabrielaMunevar/pds-proyecto-grado-II.git
+   cd pds-proyecto-grado-II
    ```
 
 2. Instalar dependencias:
@@ -49,20 +52,23 @@ El repositorio está organizado de la siguiente manera:
 
 ### Ejecutar la Aplicación
 
-#### 1. Dashboard Streamlit (Interfaz Interactiva)
-Para lanzar el dashboard fácil de usar:
-```bash
-streamlit run src/dashboard/app.py
-```
-El dashboard permite ingresar texto técnico y ver el resumen generado, junto con métricas de evaluación.
-
-#### 2. API REST (FastAPI)
-Para iniciar el servidor de la API:
+#### API REST con Frontend Integrado (FastAPI)
+Para iniciar el servidor de la API con la interfaz web integrada:
 ```bash
 cd api
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
-La documentación estará disponible en `http://localhost:8000/docs`.
+
+Una vez iniciado, puedes acceder a:
+- **Interfaz Web**: `http://localhost:8000/static/index.html` - Frontend interactivo para generar PLS y clasificar textos
+- **Documentación API**: `http://localhost:8000/docs` - Documentación interactiva de Swagger
+- **API REST**: Endpoints disponibles en `http://localhost:8000/generate`, `http://localhost:8000/evaluate`, etc.
+
+La interfaz web permite:
+- Clasificar textos (técnico vs. lenguaje sencillo)
+- Generar resúmenes en lenguaje sencillo (PLS) desde texto técnico biomédico
+- Evaluar métricas de calidad (ROUGE, BERTScore, Flesch-Kincaid)
+- Ajustar parámetros de generación (longitud máxima, beam search)
 
 ## Despliegue
 
@@ -113,9 +119,10 @@ Si la aplicación requiere autenticación (por ejemplo, para rutas de administra
 - **Usuario**: `admin`
 - **Contraseña**: `pls_project_2025`
 
-*(Nota: Estas son credenciales de ejemplo para fines de evaluación si aplica)*
-
 ## Autores
 
-- [Nombres de Miembros del Equipo]
+- Jean Munevar
+- Gabriela Munevar
+- Carlos Chaparro
+- Erika Cardenas
 - Proyecto de Grado - Maestría
