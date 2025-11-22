@@ -60,9 +60,17 @@ app.add_middleware(
 )
 
 # Montar archivos estáticos (frontend)
+# Usar ruta absoluta basada en la ubicación de main.py
 try:
-    app.mount("/static", StaticFiles(directory="static"), name="static")
-except:
+    api_dir = os.path.dirname(os.path.abspath(__file__))
+    static_dir = os.path.join(api_dir, "static")
+    if os.path.exists(static_dir):
+        app.mount("/static", StaticFiles(directory=static_dir), name="static")
+        logger.info(f"Static files mounted from: {static_dir}")
+    else:
+        logger.warning(f"Static directory not found at: {static_dir}")
+except Exception as e:
+    logger.warning(f"Could not mount static files: {e}")
     pass  # Si no existe la carpeta static, continuar sin ella
 
 # ============================================================================
@@ -276,11 +284,19 @@ from fastapi.responses import FileResponse, HTMLResponse
 @app.get("/", response_class=HTMLResponse)
 async def root():
     """Serve the frontend application"""
-    html_path = os.path.join("static", "index.html")
+    # Obtener el directorio donde está main.py (api/)
+    api_dir = os.path.dirname(os.path.abspath(__file__))
+    html_path = os.path.join(api_dir, "static", "index.html")
+    
     if os.path.exists(html_path):
         with open(html_path, "r", encoding="utf-8") as f:
             return HTMLResponse(content=f.read())
-    return HTMLResponse(content="<h1>Medical PLS API</h1><p>Frontend not found. API is running at <a href='/docs'>/docs</a></p>")
+    
+    # Si no se encuentra, mostrar mensaje con información de debug
+    logger.warning(f"Frontend not found at: {html_path}")
+    logger.warning(f"Current working directory: {os.getcwd()}")
+    logger.warning(f"API directory: {api_dir}")
+    return HTMLResponse(content=f"<h1>Medical PLS API</h1><p>Frontend not found at: {html_path}</p><p>API is running at <a href='/docs'>/docs</a></p>")
 
 @app.get("/api", response_model=Dict)
 async def api_info():
