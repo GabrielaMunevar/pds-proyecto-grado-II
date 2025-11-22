@@ -1,6 +1,6 @@
 """
 Clasificador Baseline MEJORADO para PLS/non-PLS
-TF-IDF + Logistic Regression
+TF-IDF + Logistic Regression + Features de Legibilidad
 
 MEJORAS IMPLEMENTADAS:
  Preparación CORRECTA de datos según label (PLS→resumen, non_PLS→texto_original)
@@ -25,12 +25,236 @@ from sklearn.metrics import (
     accuracy_score
 )
 from sklearn.model_selection import StratifiedKFold, cross_val_score
+from sklearn.base import BaseEstimator, TransformerMixin
+from scipy.sparse import hstack, csr_matrix
 import joblib
 from pathlib import Path
 import json
 import warnings
+import re
+
+# Importar textstat para métricas de legibilidad
+try:
+    import textstat
+    TEXTSTAT_AVAILABLE = True
+except ImportError:
+    TEXTSTAT_AVAILABLE = False
+    warnings.warn("textstat no disponible. Features de legibilidad deshabilitadas.")
 
 warnings.filterwarnings('ignore')
+
+# ============================================================================
+# FEATURE ENGINEERING: Legibilidad y Términos Técnicos
+# ============================================================================
+
+# Diccionario de términos técnicos médicos comunes
+MEDICAL_TECHNICAL_TERMS = [
+    # Métodos de estudio
+    'randomized controlled trial', 'rct', 'placebo', 'placebo-controlled',
+    'double-blind', 'single-blind', 'cohort study', 'case-control',
+    'retrospective', 'prospective', 'longitudinal', 'cross-sectional',
+    'systematic review', 'meta-analysis', 'observational study',
+    
+    # Términos estadísticos
+    'statistically significant', 'p-value', 'p <', 'p>', 'confidence interval',
+    'ci', '95% ci', 'odds ratio', 'or', 'relative risk', 'rr', 'hazard ratio',
+    'hr', 'multivariate', 'univariate', 'regression', 'logistic regression',
+    'cox regression', 'kaplan-meier', 'survival analysis',
+    
+    # Términos metodológicos
+    'efficacy', 'effectiveness', 'intervention', 'methodology', 'protocol',
+    'endpoint', 'primary endpoint', 'secondary endpoint', 'outcome measure',
+    'adverse event', 'side effect', 'contraindication', 'indication',
+    
+    # Términos técnicos médicos
+    'pathophysiology', 'etiology', 'pathogenesis', 'diagnosis', 'prognosis',
+    'morbidity', 'mortality', 'incidence', 'prevalence', 'epidemiology',
+    'pathology', 'histology', 'biomarker', 'biomarkers',
+    
+    # Acrónimos comunes
+    'rct', 'ci', 'or', 'rr', 'hr', 'pcr', 'ct', 'mri', 'ecg', 'eeg',
+    
+    # Patrones estadísticos
+    r'\bp\s*[<>=]\s*0\.\d+',  # p-values
+    r'\d+%\s*ci',  # Confidence intervals
+    r'\d+\.\d+\s*\([^)]+\)',  # Estadísticas con intervalos
+]
+
+def extract_readability_features(text):
+    """
+    Extrae features de legibilidad que distinguen PLS de texto técnico.
+    
+    PLS típicamente tiene:
+    - Mayor Flesch Reading Ease (más fácil de leer)
+    - Menor Flesch-Kincaid Grade Level (nivel escolar más bajo)
+    - Palabras más cortas
+    - Oraciones más cortas
+    - Menos palabras complejas
+    
+    Args:
+        text: Texto a analizar
+        
+    Returns:
+        dict: Diccionario con features de legibilidad
+    """
+    features = {}
+    
+    if not TEXTSTAT_AVAILABLE or not text or len(text.strip()) < 10:
+        # Valores por defecto si textstat no está disponible o texto muy corto
+        return {
+            'flesch_reading_ease': 0.0,
+            'flesch_kincaid_grade': 20.0,
+            'gunning_fog': 20.0,
+            'avg_word_length': 0.0,
+            'avg_sentence_length': 0.0,
+            'complex_words_ratio': 0.0,
+            'syllables_per_word': 0.0,
+        }
+    
+    try:
+        # Métricas básicas de legibilidad
+        features['flesch_reading_ease'] = textstat.flesch_reading_ease(text)
+        features['flesch_kincaid_grade'] = textstat.flesch_kincaid_grade(text)
+        features['gunning_fog'] = textstat.gunning_fog(text)
+        
+        # Estadísticas de texto
+        words = text.split()
+        sentences = re.split(r'[.!?]+', text)
+        sentences = [s.strip() for s in sentences if s.strip()]
+        
+        if words:
+            features['avg_word_length'] = np.mean([len(w) for w in words])
+            # Palabras complejas: >10 caracteres o >3 sílabas (aproximación)
+            complex_words = [w for w in words if len(w) > 10]
+            features['complex_words_ratio'] = len(complex_words) / len(words)
+            
+            # Sílabas promedio por palabra (aproximación)
+            total_syllables = sum(textstat.syllable_count(w) for w in words[:100])  # Limitar para velocidad
+            features['syllables_per_word'] = total_syllables / min(len(words), 100)
+        else:
+            features['avg_word_length'] = 0.0
+            features['complex_words_ratio'] = 0.0
+            features['syllables_per_word'] = 0.0
+        
+        if sentences and words:
+            features['avg_sentence_length'] = len(words) / len(sentences)
+        else:
+            features['avg_sentence_length'] = 0.0
+            
+    except Exception as e:
+        # En caso de error, usar valores por defecto
+        warnings.warn(f"Error calculando legibilidad: {e}")
+        features = {
+            'flesch_reading_ease': 0.0,
+            'flesch_kincaid_grade': 20.0,
+            'gunning_fog': 20.0,
+            'avg_word_length': 0.0,
+            'avg_sentence_length': 0.0,
+            'complex_words_ratio': 0.0,
+            'syllables_per_word': 0.0,
+        }
+    
+    return features
+
+def count_technical_terms(text):
+    """
+    Cuenta la densidad de términos técnicos médicos en el texto.
+    
+    Texto técnico típicamente tiene mayor densidad de estos términos.
+    
+    Args:
+        text: Texto a analizar
+        
+    Returns:
+        dict: Diccionario con conteos de términos técnicos
+    """
+    if not text:
+        return {
+            'technical_terms_count': 0,
+            'technical_density': 0.0,
+            'statistical_patterns_count': 0,
+            'acronyms_count': 0,
+        }
+    
+    text_lower = text.lower()
+    words = text.split()
+    n_words = len(words) if words else 1
+    
+    # Contar términos técnicos exactos
+    technical_count = 0
+    for term in MEDICAL_TECHNICAL_TERMS:
+        if isinstance(term, str) and len(term) > 2:  # Solo strings, no regex aún
+            if term in text_lower:
+                technical_count += text_lower.count(term)
+    
+    # Contar patrones estadísticos (regex)
+    statistical_patterns = [
+        r'\bp\s*[<>=]\s*0\.\d+',  # p-values
+        r'\d+%\s*ci',  # Confidence intervals
+        r'\d+\.\d+\s*\([^)]+\)',  # Estadísticas con intervalos
+    ]
+    stats_count = sum(len(re.findall(pattern, text_lower)) for pattern in statistical_patterns)
+    
+    # Contar acrónimos comunes (palabras en mayúsculas de 2-5 letras)
+    acronyms = re.findall(r'\b[A-Z]{2,5}\b', text)
+    acronyms_count = len(acronyms)
+    
+    # Densidad: términos técnicos por 100 palabras
+    technical_density = (technical_count / n_words) * 100 if n_words > 0 else 0.0
+    
+    return {
+        'technical_terms_count': technical_count,
+        'technical_density': technical_density,
+        'statistical_patterns_count': stats_count,
+        'acronyms_count': acronyms_count,
+    }
+
+class ReadabilityFeatureExtractor(BaseEstimator, TransformerMixin):
+    """
+    Transformer de sklearn para extraer features de legibilidad y términos técnicos.
+    """
+    def fit(self, X, y=None):
+        return self
+    
+    def transform(self, X):
+        """
+        Transforma textos en matriz de features de legibilidad.
+        
+        Args:
+            X: Lista o Series de textos
+            
+        Returns:
+            scipy.sparse.csr_matrix: Matriz sparse con features
+        """
+        features_list = []
+        
+        for text in X:
+            # Features de legibilidad
+            readability = extract_readability_features(str(text))
+            
+            # Features de términos técnicos
+            technical = count_technical_terms(str(text))
+            
+            # Combinar todos los features en un array
+            feature_vector = [
+                readability['flesch_reading_ease'],
+                readability['flesch_kincaid_grade'],
+                readability['gunning_fog'],
+                readability['avg_word_length'],
+                readability['avg_sentence_length'],
+                readability['complex_words_ratio'],
+                readability['syllables_per_word'],
+                technical['technical_terms_count'],
+                technical['technical_density'],
+                technical['statistical_patterns_count'],
+                technical['acronyms_count'],
+            ]
+            
+            features_list.append(feature_vector)
+        
+        # Convertir a numpy array y luego a sparse matrix
+        features_array = np.array(features_list)
+        return csr_matrix(features_array)
 
 def load_data():
     """Carga los datos de entrenamiento y prueba."""
@@ -103,18 +327,22 @@ def prepare_text_data(df):
     
     return pd.Series(texts, index=valid_indices)
 
-def cross_validate_classifier(train_texts, train_labels):
+def cross_validate_classifier(train_texts, train_labels, use_readability_features=True):
     """
     Cross-validation 5-fold estratificado para verificar estabilidad.
     
-    NUEVA FUNCIONALIDAD - No existía en versión original.
-    Valida que el modelo generaliza bien y no depende del split específico.
+    MEJORADO: Ahora incluye features de legibilidad y términos técnicos.
     """
     print("\n" + "="*80)
     print("CROSS-VALIDATION (5-FOLD ESTRATIFICADO)")
     print("="*80)
     
-    # Vectorizer (misma configuración que entrenamiento final)
+    if use_readability_features:
+        print("  Usando: TF-IDF + Features de Legibilidad + Términos Técnicos")
+    else:
+        print("  Usando: TF-IDF solamente (baseline)")
+    
+    # TF-IDF Vectorizer
     vectorizer = TfidfVectorizer(
         max_features=10000,
         ngram_range=(1, 2),
@@ -123,7 +351,21 @@ def cross_validate_classifier(train_texts, train_labels):
         max_df=0.95
     )
     
-    X = vectorizer.fit_transform(train_texts)
+    X_tfidf = vectorizer.fit_transform(train_texts)
+    
+    # Features de legibilidad y términos técnicos
+    if use_readability_features:
+        readability_extractor = ReadabilityFeatureExtractor()
+        X_readability = readability_extractor.transform(train_texts)
+        
+        # Combinar TF-IDF con features de legibilidad
+        X = hstack([X_tfidf, X_readability])
+        print(f"   TF-IDF features: {X_tfidf.shape[1]:,}")
+        print(f"   Readability features: {X_readability.shape[1]}")
+        print(f"   Total features: {X.shape[1]:,}")
+    else:
+        X = X_tfidf
+        print(f"   TF-IDF features: {X.shape[1]:,}")
     
     # Clasificador (misma configuración que entrenamiento final)
     clf = LogisticRegression(
@@ -277,15 +519,20 @@ def evaluate_detailed(test_labels, y_pred, y_proba, test_texts):
         'false_negatives': int(n_fn)
     }
 
-def train_baseline_classifier(train_df, test_df):
+def train_baseline_classifier(train_df, test_df, use_readability_features=True):
     """
     Entrena clasificador baseline con TF-IDF + Logistic Regression.
     
-    MEJORADO: Incluye cross-validation y evaluación detallada.
+    MEJORADO: 
+    - Incluye cross-validation y evaluación detallada
+    - NUEVO: Features de legibilidad y términos técnicos médicos
     """
     print("\n" + "="*80)
     print("ENTRENANDO CLASIFICADOR BASELINE")
     print("="*80)
+    
+    if use_readability_features:
+        print("  MEJORA IMPLEMENTADA: Features de legibilidad + términos técnicos")
     
     # Preparar datos con función CORREGIDA
     print("\n Preparando textos...")
@@ -300,7 +547,7 @@ def train_baseline_classifier(train_df, test_df):
     print(f"Test:  {len(test_texts):,} textos válidos")
     
     # Cross-validation ANTES de entrenar modelo final
-    cv_results = cross_validate_classifier(train_texts, train_labels)
+    cv_results = cross_validate_classifier(train_texts, train_labels, use_readability_features)
     
     # TF-IDF Vectorizer
     print("\n Vectorizando con TF-IDF...")
@@ -312,11 +559,36 @@ def train_baseline_classifier(train_df, test_df):
         max_df=0.95
     )
     
-    X_train = vectorizer.fit_transform(train_texts)
-    X_test = vectorizer.transform(test_texts)
+    X_train_tfidf = vectorizer.fit_transform(train_texts)
+    X_test_tfidf = vectorizer.transform(test_texts)
     
-    print(f"   Dimensiones TF-IDF: {X_train.shape}")
-    print(f"   Features (n-gramas): {X_train.shape[1]:,}")
+    print(f"   Dimensiones TF-IDF: {X_train_tfidf.shape}")
+    print(f"   Features TF-IDF (n-gramas): {X_train_tfidf.shape[1]:,}")
+    
+    # Features de legibilidad y términos técnicos
+    if use_readability_features:
+        print("\n Extrayendo features de legibilidad y términos técnicos...")
+        readability_extractor = ReadabilityFeatureExtractor()
+        X_train_readability = readability_extractor.transform(train_texts)
+        X_test_readability = readability_extractor.transform(test_texts)
+        
+        print(f"   Features de legibilidad: {X_train_readability.shape[1]}")
+        print(f"     - Flesch Reading Ease")
+        print(f"     - Flesch-Kincaid Grade")
+        print(f"     - Gunning Fog Index")
+        print(f"     - Promedio longitud palabras/oraciones")
+        print(f"     - Ratio palabras complejas")
+        print(f"     - Densidad términos técnicos médicos")
+        print(f"     - Patrones estadísticos (p-values, CI, etc.)")
+        
+        # Combinar TF-IDF con features de legibilidad
+        X_train = hstack([X_train_tfidf, X_train_readability])
+        X_test = hstack([X_test_tfidf, X_test_readability])
+        
+        print(f"\n   Total features combinadas: {X_train.shape[1]:,}")
+    else:
+        X_train = X_train_tfidf
+        X_test = X_test_tfidf
     
     # Logistic Regression con manejo de desbalance
     print("\n  Entrenando Logistic Regression...")
@@ -349,14 +621,22 @@ def train_baseline_classifier(train_df, test_df):
     joblib.dump(vectorizer, model_dir / 'vectorizer.pkl')
     joblib.dump(clf, model_dir / 'classifier.pkl')
     
+    # Guardar extractor de legibilidad si se usó
+    if use_readability_features:
+        joblib.dump(readability_extractor, model_dir / 'readability_extractor.pkl')
+        print(f"\n   Readability extractor guardado")
+    
     # Guardar métricas comprehensivas
     metrics = {
-        'model': 'baseline_tfidf_logreg',
+        'model': 'baseline_tfidf_logreg_with_readability' if use_readability_features else 'baseline_tfidf_logreg',
+        'use_readability_features': use_readability_features,
         'test_metrics': detailed_metrics,
         'cv_metrics': cv_results,
         'train_samples': len(train_texts),
         'test_samples': len(test_texts),
-        'features': X_train.shape[1]
+        'tfidf_features': X_train_tfidf.shape[1],
+        'readability_features': X_train_readability.shape[1] if use_readability_features else 0,
+        'total_features': X_train.shape[1]
     }
     
     with open(model_dir / 'metrics.json', 'w') as f:
@@ -365,11 +645,11 @@ def train_baseline_classifier(train_df, test_df):
     print(f"\n Modelo guardado en: {model_dir}")
     
     # Crear y guardar función gate mejorada
-    save_gate_function(clf, vectorizer, model_dir)
+    save_gate_function(clf, vectorizer, model_dir, readability_extractor if use_readability_features else None)
     
     return clf, vectorizer, metrics
 
-def create_gate_function(clf, vectorizer, threshold=0.7):
+def create_gate_function(clf, vectorizer, threshold=0.7, readability_extractor=None):
     """
     Crea función 'gate' MEJORADA con umbral ajustable.
     
@@ -377,6 +657,7 @@ def create_gate_function(clf, vectorizer, threshold=0.7):
     - Ahora usa probabilidades en vez de solo predicción binaria
     - Umbral ajustable (default 0.7 = conservador)
     - Puede retornar confidence score
+    - NUEVO: Soporta features de legibilidad si están disponibles
     
     Esta función se usa ANTES de generar PLS:
     - Si el texto ya es PLS (prob > threshold) → skip generación
@@ -389,9 +670,10 @@ def create_gate_function(clf, vectorizer, threshold=0.7):
                   0.5 = decisión balanceada
                   0.7 = conservador (recomendado, menos false positives)
                   0.9 = muy conservador
+        readability_extractor: ReadabilityFeatureExtractor opcional
     
     Uso:
-        gate = create_gate_function(clf, vectorizer, threshold=0.7)
+        gate = create_gate_function(clf, vectorizer, threshold=0.7, readability_extractor=extractor)
         is_pls, confidence = gate(text, return_confidence=True)
         if is_pls:
             print(f"Skip generación (confidence: {confidence:.2f})")
@@ -413,8 +695,17 @@ def create_gate_function(clf, vectorizer, threshold=0.7):
             # Texto muy corto, asumir que necesita generación
             return (False, 0.0) if return_confidence else False
         
-        # Vectorizar y predecir
-        X = vectorizer.transform([str(text)])
+        # Vectorizar con TF-IDF
+        X_tfidf = vectorizer.transform([str(text)])
+        
+        # Agregar features de legibilidad si están disponibles
+        if readability_extractor is not None:
+            X_readability = readability_extractor.transform([str(text)])
+            X = hstack([X_tfidf, X_readability])
+        else:
+            X = X_tfidf
+        
+        # Predecir
         proba = clf.predict_proba(X)[0]
         
         # proba[0] = prob non_pls, proba[1] = prob pls
@@ -427,7 +718,7 @@ def create_gate_function(clf, vectorizer, threshold=0.7):
     
     return gate
 
-def save_gate_function(clf, vectorizer, model_dir):
+def save_gate_function(clf, vectorizer, model_dir, readability_extractor=None):
     """
     Guarda helper para cargar y usar el gate fácilmente.
     """
@@ -450,19 +741,30 @@ Uso con confidence:
 """
 import joblib
 from pathlib import Path
+from scipy.sparse import hstack
 
-def create_gate_function(clf, vectorizer, threshold=0.7):
+def create_gate_function(clf, vectorizer, threshold=0.7, readability_extractor=None):
     """
     Crea función gate con umbral ajustable.
     
     Args:
         threshold: 0.5 (balanceado), 0.7 (conservador), 0.9 (muy conservador)
+        readability_extractor: Extractor opcional de features de legibilidad
     """
     def gate(text, return_confidence=False):
         if not text or len(str(text).strip()) < 50:
             return (False, 0.0) if return_confidence else False
         
-        X = vectorizer.transform([str(text)])
+        # Vectorizar con TF-IDF
+        X_tfidf = vectorizer.transform([str(text)])
+        
+        # Agregar features de legibilidad si están disponibles
+        if readability_extractor is not None:
+            X_readability = readability_extractor.transform([str(text)])
+            X = hstack([X_tfidf, X_readability])
+        else:
+            X = X_tfidf
+        
         proba = clf.predict_proba(X)[0]
         prob_pls = float(proba[1])
         is_pls = prob_pls >= threshold
@@ -486,7 +788,15 @@ def load_gate(threshold=0.7):
     model_dir = Path('models/baseline_classifier')
     vectorizer = joblib.load(model_dir / 'vectorizer.pkl')
     clf = joblib.load(model_dir / 'classifier.pkl')
-    return create_gate_function(clf, vectorizer, threshold=threshold)
+    
+    # Intentar cargar readability extractor si existe
+    readability_extractor = None
+    readability_path = model_dir / 'readability_extractor.pkl'
+    if readability_path.exists():
+        readability_extractor = joblib.load(readability_path)
+    
+    return create_gate_function(clf, vectorizer, threshold=threshold, 
+                                readability_extractor=readability_extractor)
 
 if __name__ == "__main__":
     # Ejemplo de uso
@@ -508,12 +818,14 @@ if __name__ == "__main__":
     
     print(f" Gate helper guardado en: {helper_path}")
 
-def evaluate_by_source(test_df, clf, vectorizer):
+def evaluate_by_source(test_df, clf, vectorizer, readability_extractor=None):
     """
     Evalúa el modelo por fuente de datos.
     
     Útil para detectar si el modelo funciona bien en todas las fuentes
     o si tiene sesgo hacia alguna fuente específica.
+    
+    MEJORADO: Soporta features de legibilidad si están disponibles.
     """
     print("\n" + "="*80)
     print("EVALUACIÓN POR FUENTE")
@@ -539,7 +851,15 @@ def evaluate_by_source(test_df, clf, vectorizer):
         source_labels = source_data.loc[source_texts.index, 'label']
         
         # Vectorizar y predecir
-        X_source = vectorizer.transform(source_texts)
+        X_source_tfidf = vectorizer.transform(source_texts)
+        
+        # Agregar features de legibilidad si están disponibles
+        if readability_extractor is not None:
+            X_source_readability = readability_extractor.transform(source_texts)
+            X_source = hstack([X_source_tfidf, X_source_readability])
+        else:
+            X_source = X_source_tfidf
+        
         y_pred_source = clf.predict(X_source)
         
         # Métricas
@@ -574,11 +894,20 @@ def main():
     # Cargar datos
     train_df, test_df = load_data()
     
-    # Entrenar clasificador baseline
-    clf, vectorizer, metrics = train_baseline_classifier(train_df, test_df)
+    # Entrenar clasificador baseline CON features de legibilidad
+    use_readability = True  # Cambiar a False para usar solo TF-IDF
+    clf, vectorizer, metrics = train_baseline_classifier(train_df, test_df, use_readability_features=use_readability)
+    
+    # Cargar readability extractor si se usó
+    readability_extractor = None
+    if use_readability:
+        model_dir = Path('models/baseline_classifier')
+        readability_path = model_dir / 'readability_extractor.pkl'
+        if readability_path.exists():
+            readability_extractor = joblib.load(readability_path)
     
     # Evaluar por fuente
-    source_metrics = evaluate_by_source(test_df, clf, vectorizer)
+    source_metrics = evaluate_by_source(test_df, clf, vectorizer, readability_extractor)
     
     # Verificar si cumple target académico
     print("\n" + "="*80)
@@ -601,7 +930,15 @@ def main():
     print("DEMOSTRACIÓN FUNCIÓN GATE")
     print("="*80)
     
-    gate = create_gate_function(clf, vectorizer, threshold=0.7)
+    # Cargar readability extractor para el gate si está disponible
+    gate_readability_extractor = None
+    if use_readability:
+        model_dir = Path('models/baseline_classifier')
+        readability_path = model_dir / 'readability_extractor.pkl'
+        if readability_path.exists():
+            gate_readability_extractor = joblib.load(readability_path)
+    
+    gate = create_gate_function(clf, vectorizer, threshold=0.7, readability_extractor=gate_readability_extractor)
     
     # Ejemplos de uso
     examples = [
