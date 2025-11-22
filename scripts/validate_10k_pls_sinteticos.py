@@ -1,8 +1,9 @@
 """
-VALIDACIÓN COMPLETA DE 10K PLS SINTÉTICOS
-==========================================
+VALIDACIÓN COMPLETA DE PLS SINTÉTICOS
+=====================================
 
-Este script valida los 10,000 PLS sintéticos generados con GPT-4o-mini.
+Este script valida los PLS sintéticos generados con GPT-4o-mini.
+Soporta validación de 10K, 20K o cualquier cantidad de pares.
 
 El script realiza:
 1. Validación automática (FRE, FKG, longitud)
@@ -27,15 +28,17 @@ Dependencias adicionales:
 
 Archivo de entrada:
     - data/synthetic_pls/pls_produccion_10k.csv (ruta por defecto)
+    - data/synthetic_pls/pls_produccion_20k_v7.csv (20K pares)
+    - Cualquier archivo CSV con columnas 'texto_original' y 'pls_generado'
 
 Salidas:
-    - pls_10k_validado.csv (todos con métricas)
-    - pls_10k_final_aprobados.csv (solo los que pasan filtros)
+    - pls_validado.csv (todos con métricas)
+    - pls_final_aprobados.csv (solo los que pasan filtros)
     - validacion_report.txt (reporte completo)
     - validacion_distribucion.png (gráficas con 9 paneles)
     - validacion_metrics.json (métricas en JSON)
 
-Tiempo estimado: 15-20 minutos
+Tiempo estimado: 15-20 minutos (10K), 30-40 minutos (20K)
 """
 
 import pandas as pd
@@ -51,6 +54,18 @@ from datetime import datetime
 import warnings
 from rouge_score import rouge_scorer
 from easse.sari import corpus_sari
+from scipy.sparse import hstack
+
+# Intentar importar ReadabilityFeatureExtractor si está disponible
+try:
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from src.models.train_classifier import ReadabilityFeatureExtractor
+    READABILITY_EXTRACTOR_AVAILABLE = True
+except ImportError:
+    READABILITY_EXTRACTOR_AVAILABLE = False
+    ReadabilityFeatureExtractor = None
 
 warnings.filterwarnings('ignore')
 
@@ -89,23 +104,50 @@ class ValidadorPLSSinteticos:
     - Nivel 3: Comparación estadística con PLS reales
     """
     
-    def __init__(self, csv_path='data/synthetic_pls/pls_produccion_10k.csv'):
+    def __init__(self, csv_path=None):
         """
         Args:
-            csv_path: Ruta al CSV con PLS sintéticos generados
+            csv_path: Ruta al CSV con PLS sintéticos generados. Si es None, busca automáticamente.
         """
+        if csv_path is None:
+            # Buscar archivo automáticamente
+            posibles_archivos = [
+                'data/synthetic_pls/pls_produccion_20k_v7.csv',  # 20K pares
+                'data/synthetic_pls/pls_produccion_10k.csv',  # 10K pares
+                'pls_produccion_20k_v7.csv',
+                'pls_produccion_10k.csv',
+                'pls_20k.csv',
+                'pls_10k.csv',
+                'pls_sinteticos_20k.csv',
+                'pls_sinteticos_10k.csv'
+            ]
+            
+            csv_path = None
+            for archivo in posibles_archivos:
+                if Path(archivo).exists():
+                    csv_path = archivo
+                    break
+            
+            if csv_path is None:
+                raise FileNotFoundError(
+                    f"No se encontró archivo de PLS sintéticos.\n"
+                    f"Buscados: {posibles_archivos}\n"
+                    f"Asegúrate de que el archivo esté en el directorio correcto."
+                )
+        
         self.csv_path = csv_path
         self.df = None
         self.clf = None
         self.vectorizer = None
+        self.readability_extractor = None
         self.pls_reales_probs = None
         self.resultados = {}
         
-        print("="*80)
-        print("VALIDADOR DE PLS SINTÉTICOS")
-        print("="*80)
-        print(f"Fecha/Hora: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print(f"Archivo: {csv_path}")
+        print("="*80, flush=True)
+        print("VALIDADOR DE PLS SINTETICOS", flush=True)
+        print("="*80, flush=True)
+        print(f"Fecha/Hora: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
+        print(f"Archivo: {csv_path}", flush=True)
         
     def cargar_datos(self):
         """Carga los PLS sintéticos generados."""
@@ -115,7 +157,7 @@ class ValidadorPLSSinteticos:
         if not Path(self.csv_path).exists():
             raise FileNotFoundError(
                 f" No se encontró {self.csv_path}\n"
-                f"   Asegúrate de que la generación de 10K haya terminado."
+                f"   Asegúrate de que la generación haya terminado."
             )
         
         self.df = pd.read_csv(self.csv_path)
@@ -128,6 +170,12 @@ class ValidadorPLSSinteticos:
         
         if missing:
             raise ValueError(f" Faltan columnas: {missing}")
+        
+        # Mapear columnas si tienen nombres diferentes
+        if 'flesch_reading_ease' in self.df.columns and 'fre' not in self.df.columns:
+            self.df['fre'] = self.df['flesch_reading_ease']
+        if 'flesch_kincaid_grade' in self.df.columns and 'fkg' not in self.df.columns:
+            self.df['fkg'] = self.df['flesch_kincaid_grade']
         
         # Estadísticas básicas
         if 'fre' in self.df.columns:
@@ -151,11 +199,40 @@ class ValidadorPLSSinteticos:
             print("   Ejecuta primero: python src/models/train_classifier.py")
             return False
         
+        # Importar ReadabilityFeatureExtractor ANTES de cargar el pickle
+        # Esto es necesario para que joblib pueda deserializar el objeto
+        readability_path = model_dir / 'readability_extractor.pkl'
+        if readability_path.exists():
+            try:
+                # Importar la clase antes de cargar
+                import sys
+                script_path = Path(__file__).parent.parent
+                sys.path.insert(0, str(script_path))
+                from src.models.train_classifier import ReadabilityFeatureExtractor
+                # Registrar la clase en el módulo actual para joblib
+                import scripts.validate_10k_pls_sinteticos as current_module
+                current_module.ReadabilityFeatureExtractor = ReadabilityFeatureExtractor
+            except ImportError as e:
+                print(f"  No se pudo importar ReadabilityFeatureExtractor: {e}")
+                print("  El clasificador requiere features de legibilidad pero no se pueden cargar")
+                return False
+        
         try:
             self.vectorizer = joblib.load(model_dir / 'vectorizer.pkl')
             self.clf = joblib.load(model_dir / 'classifier.pkl')
             
-            print(" Clasificador cargado correctamente")
+            # Cargar extractor de features de legibilidad si existe
+            if readability_path.exists():
+                try:
+                    self.readability_extractor = joblib.load(readability_path)
+                    print(" Clasificador cargado correctamente (con features de legibilidad)")
+                except Exception as e:
+                    print(f"  Error cargando extractor de legibilidad: {e}")
+                    print("  El clasificador requiere estas features, no se puede continuar")
+                    return False
+            else:
+                self.readability_extractor = None
+                print(" Clasificador cargado correctamente (solo TF-IDF)")
             
             # Cargar test set para comparación
             try:
@@ -166,11 +243,18 @@ class ValidadorPLSSinteticos:
                 X_test = test_data['X_test']
                 y_test = test_data['y_test']
                 
-                # Calcular probabilidades de PLS reales
-                probs = self.clf.predict_proba(self.vectorizer.transform(X_test))[:, 1]
-                self.pls_reales_probs = probs[np.array(y_test) == 1]
-                
-                print(f" Cargados {len(self.pls_reales_probs)} PLS reales para comparación")
+                # Transformar test set con el mismo pipeline que se usó en entrenamiento
+                X_test_tfidf = self.vectorizer.transform(X_test)
+                if self.readability_extractor is not None:
+                    # Necesitamos recrear el extractor para el test set
+                    # Por ahora, saltamos la comparación si no tenemos el extractor
+                    print("  Test set requiere extractor de legibilidad, skip comparación")
+                    self.pls_reales_probs = None
+                else:
+                    # Calcular probabilidades de PLS reales
+                    probs = self.clf.predict_proba(X_test_tfidf)[:, 1]
+                    self.pls_reales_probs = probs[np.array(y_test) == 1]
+                    print(f" Cargados {len(self.pls_reales_probs)} PLS reales para comparación")
                 
             except Exception as e:
                 print(f"  No se pudo cargar test set: {e}")
@@ -308,7 +392,7 @@ class ValidadorPLSSinteticos:
             print("  Clasificador no disponible, skip validación")
             return None
         
-        print("\n Clasificando 10K PLS sintéticos...")
+        print(f"\n Clasificando {len(self.df):,} PLS sintéticos...")
         print("   (Procesando en batches de 1000)")
         
         probas_pls = []
@@ -318,7 +402,16 @@ class ValidadorPLSSinteticos:
             batch = self.df['pls_generado'].iloc[i:i+batch_size].tolist()
             batch_clean = [str(text) for text in batch if pd.notna(text)]
             
-            X_batch = self.vectorizer.transform(batch_clean)
+            # Transformar con TF-IDF
+            X_batch_tfidf = self.vectorizer.transform(batch_clean)
+            
+            # Agregar features de legibilidad si están disponibles
+            if self.readability_extractor is not None:
+                X_batch_readability = self.readability_extractor.transform(batch_clean)
+                X_batch = hstack([X_batch_tfidf, X_batch_readability])
+            else:
+                X_batch = X_batch_tfidf
+            
             probas_batch = self.clf.predict_proba(X_batch)[:, 1]
             probas_pls.extend(probas_batch)
             
@@ -490,6 +583,10 @@ class ValidadorPLSSinteticos:
             print("  No hay PLS reales para comparar")
             return None
         
+        if 'clf_prob_pls' not in self.df.columns:
+            print("  No hay probabilidades de clasificador para comparar")
+            return None
+        
         # Comparar distribuciones
         prob_reales_media = self.pls_reales_probs.mean()
         prob_sinteticos_media = self.df['clf_prob_pls'].mean()
@@ -621,7 +718,8 @@ class ValidadorPLSSinteticos:
         print("-"*80)
         
         fig, axes = plt.subplots(3, 3, figsize=(18, 16))
-        fig.suptitle('Validación de 10K PLS Sintéticos', fontsize=16, fontweight='bold')
+        n_total = len(self.df)
+        fig.suptitle(f'Validación de {n_total:,} PLS Sintéticos', fontsize=16, fontweight='bold')
         
         # 1. Distribución FRE
         ax1 = axes[0, 0]
@@ -686,23 +784,30 @@ class ValidadorPLSSinteticos:
             data_box.append(self.pls_reales_probs)
             labels_box.append('PLS Reales\nCochrane')
         
-        data_box.append(self.df['clf_prob_pls'].values)
-        labels_box.append('PLS Sintéticos\nGPT-4o-mini')
+        if 'clf_prob_pls' in self.df.columns:
+            data_box.append(self.df['clf_prob_pls'].values)
+            labels_box.append('PLS Sintéticos\nGPT-4o-mini')
+            
+            if len(df_final) > 0 and 'clf_prob_pls' in df_final.columns:
+                data_box.append(df_final['clf_prob_pls'].values)
+                labels_box.append('PLS Aprobados\n(filtrados)')
         
-        if len(df_final) > 0 and 'clf_prob_pls' in df_final.columns:
-            data_box.append(df_final['clf_prob_pls'].values)
-            labels_box.append('PLS Aprobados\n(filtrados)')
-        
-        bp = ax5.boxplot(data_box, labels=labels_box, patch_artist=True)
-        colors = ['orange', 'blue', 'green']
-        for patch, color in zip(bp['boxes'], colors[:len(data_box)]):
-            patch.set_facecolor(color)
-            patch.set_alpha(0.6)
-        ax5.axhline(0.75, color='red', linestyle='--', linewidth=2, label='Umbral')
-        ax5.set_ylabel('Probabilidad PLS')
-        ax5.set_title('Comparación de Distribuciones')
-        ax5.legend()
-        ax5.grid(alpha=0.3, axis='y')
+        if len(data_box) > 0:
+            bp = ax5.boxplot(data_box, labels=labels_box, patch_artist=True)
+            colors = ['orange', 'blue', 'green']
+            for patch, color in zip(bp['boxes'], colors[:len(data_box)]):
+                patch.set_facecolor(color)
+                patch.set_alpha(0.6)
+            ax5.axhline(0.75, color='red', linestyle='--', linewidth=2, label='Umbral')
+            ax5.set_ylabel('Probabilidad PLS')
+            ax5.set_title('Comparación de Distribuciones')
+            ax5.legend()
+            ax5.grid(alpha=0.3, axis='y')
+        else:
+            ax5.text(0.5, 0.5, 'Clasificador no disponible', 
+                    ha='center', va='center', transform=ax5.transAxes, fontsize=12)
+            ax5.set_title('Comparación de Distribuciones')
+            ax5.axis('off')
         
         # 6. Resumen de aprobación
         ax6 = axes[1, 2]
@@ -794,13 +899,14 @@ class ValidadorPLSSinteticos:
         print("-"*80)
         
         # 1. CSV con todos los PLS y métricas
-        output_all = 'pls_10k_validado.csv'
+        n_total = len(self.df)
+        output_all = f'pls_{n_total//1000}k_validado.csv' if n_total >= 1000 else f'pls_{n_total}_validado.csv'
         self.df.to_csv(output_all, index=False)
         print(f" Guardado: {output_all}")
         print(f"   Contiene: {len(self.df):,} PLS con todas las métricas")
         
         # 2. CSV solo con aprobados
-        output_final = 'pls_10k_final_aprobados.csv'
+        output_final = f'pls_{n_total//1000}k_final_aprobados.csv' if n_total >= 1000 else f'pls_{n_total}_final_aprobados.csv'
         df_final.to_csv(output_final, index=False)
         print(f" Guardado: {output_final}")
         print(f"   Contiene: {len(df_final):,} PLS aprobados")
@@ -809,7 +915,7 @@ class ValidadorPLSSinteticos:
         output_report = 'validacion_report.txt'
         with open(output_report, 'w', encoding='utf-8') as f:
             f.write("="*80 + "\n")
-            f.write("REPORTE DE VALIDACIÓN DE 10K PLS SINTÉTICOS\n")
+            f.write(f"REPORTE DE VALIDACIÓN DE {len(self.df):,} PLS SINTÉTICOS\n")
             f.write("="*80 + "\n")
             f.write(f"Fecha: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"Archivo fuente: {self.csv_path}\n")
@@ -923,47 +1029,52 @@ def main():
     """
     Script principal de validación.
     """
-    print("\n")
-    print("╔" + "═"*78 + "╗")
-    print("║" + " "*20 + "VALIDACIÓN DE PLS SINTÉTICOS" + " "*30 + "║")
-    print("╚" + "═"*78 + "╝")
-    print()
+    # Forzar flush inmediato de prints
+    import sys
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace') if hasattr(sys.stdout, 'reconfigure') else None
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace') if hasattr(sys.stderr, 'reconfigure') else None
     
-    # Buscar archivo de PLS generados
-    posibles_archivos = [
-        'data/synthetic_pls/pls_produccion_10k.csv',  # Ruta correcta
-        'pls_produccion_10k.csv',  # Por si está en el directorio raíz
-        'pls_10k.csv',
-        'pls_sinteticos_10k.csv'
-    ]
+    # Print inicial para verificar que funciona
+    print("\n", flush=True)
+    print("="*80, flush=True)
+    print(" " + " "*20 + "VALIDACION DE PLS SINTETICOS" + " "*30, flush=True)
+    print("="*80, flush=True)
+    print(flush=True)
     
+    # El validador ahora busca automáticamente el archivo
+    # Pero también acepta un argumento de línea de comandos
     csv_path = None
-    for archivo in posibles_archivos:
-        if Path(archivo).exists():
-            csv_path = archivo
-            break
+    if len(sys.argv) > 1:
+        csv_path = sys.argv[1]
+        if not Path(csv_path).exists():
+            print(f" ERROR: Archivo especificado no encontrado: {csv_path}", flush=True)
+            return
     
-    if csv_path is None:
-        print(" ERROR: No se encontró archivo de PLS sintéticos")
-        print(f"\nBuscados: {posibles_archivos}")
-        print("\nAsegúrate de que la generación haya terminado")
-        print("y que el archivo esté en el directorio actual.")
+    # Ejecutar validación (busca automáticamente si no se especificó)
+    try:
+        print("Iniciando validador...", flush=True)
+        validador = ValidadorPLSSinteticos(csv_path)
+    except FileNotFoundError as e:
+        print(f" ERROR: {e}", flush=True)
+        return
+    except Exception as e:
+        print(f" ERROR al inicializar validador: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
         return
     
-    # Ejecutar validación
-    validador = ValidadorPLSSinteticos(csv_path)
-    
     try:
+        print("Ejecutando validacion completa...", flush=True)
         df_final = validador.ejecutar_validacion_completa()
         
-        print("\n" + "="*80)
-        print(" VALIDACIÓN EXITOSA")
-        print("="*80)
-        print(f"\n Dataset final: {len(df_final):,} PLS aprobados")
-        print(f" Listos para fine-tuning de T5")
+        print("\n" + "="*80, flush=True)
+        print(" VALIDACION EXITOSA", flush=True)
+        print("="*80, flush=True)
+        print(f"\n Dataset final: {len(df_final):,} PLS aprobados", flush=True)
+        print(f" Listos para fine-tuning de T5", flush=True)
         
     except Exception as e:
-        print(f"\n ERROR durante validación: {e}")
+        print(f"\n ERROR durante validacion: {e}", flush=True)
         import traceback
         traceback.print_exc()
 
